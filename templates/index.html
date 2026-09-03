@@ -34,6 +34,10 @@
           <!-- Injected via JavaScript -->
         </div>
 
+        <button id="openHelpBtn" class="btn btn-secondary btn-sm" title="Open Help & How-To Manual">
+          ❓ Help Guide
+        </button>
+
         <button id="openInviteBtn" class="btn btn-secondary btn-sm">
           👥 Share & Invite
         </button>
@@ -394,6 +398,82 @@
           <button type="submit" class="btn btn-primary">Create Journey</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL 6: HELP & HOW-TO GUIDE -->
+  <div class="modal-overlay" id="helpModal" style="display:none;">
+    <div class="modal-card" style="max-width:760px; max-height:85vh; overflow-y:auto;">
+      <div class="modal-header">
+        <h3>📖 Travel Scout &bull; User Guide &amp; How-To</h3>
+        <button class="modal-close" id="closeHelpModalBtn">&times;</button>
+      </div>
+      <div style="font-size:0.88rem; color:var(--text-muted); display:flex; flex-direction:column; gap:1.2rem; padding:0.5rem 0;">
+        
+        <div style="background:rgba(56,189,248,0.06); border:1px solid rgba(56,189,248,0.2); border-radius:8px; padding:0.9rem;">
+          <strong style="color:#38bdf8; font-size:0.95rem;">🌍 Welcome to Travel Scout!</strong>
+          <p style="margin-top:0.3rem; line-height:1.45; color:var(--text-main);">
+            A standalone collaborative platform designed for multi-city journeys with date-matched accommodations, team co-planning, and real-time cultural discovery.
+          </p>
+        </div>
+
+        <div>
+          <h4 style="color:#fbbf24; margin-bottom:0.4rem;">1. Trip Management &amp; Customization</h4>
+          <ul style="padding-left:1.2rem; line-height:1.5;">
+            <li><strong>✏️ Customize:</strong> Click to rename your trip or update its description/purpose anytime.</li>
+            <li><strong>➕ New Trip:</strong> Create a brand-new trip from scratch (e.g. Japan, Italy, California) with your first city, dates, and starting hotel.</li>
+            <li><strong>Trip Switcher:</strong> Use the dropdown in the header to jump between saved itineraries.</li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 style="color:#38bdf8; margin-bottom:0.4rem;">2. Cities &amp; Accommodations Manager</h4>
+          <ul style="padding-left:1.2rem; line-height:1.5;">
+            <li><strong>➕ Add Destination City:</strong> Add any city worldwide with arrival/departure dates and initial hotel.</li>
+            <li><strong>🗑️ Delete City:</strong> Remove unwanted cities with automatic timeline re-indexing.</li>
+            <li><strong>🏨 Add Hotel by Date:</strong> Moving hotels midway through a city stay? Add secondary hotels with specific check-in/out dates. Transit calculations automatically switch to whichever hotel is active on each day!</li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 style="color:#e879f9; margin-bottom:0.4rem;">3. Collaborative Itinerary &amp; Timeline</h4>
+          <ul style="padding-left:1.2rem; line-height:1.5;">
+            <li><strong>📋 Bucket List (To-Do):</strong> Hold unscheduled activities until you decide which day to visit them.</li>
+            <li><strong>📅 Date Assignment:</strong> Use the date dropdown on any card to move it to a specific day or return to the Bucket List.</li>
+            <li><strong>👤 Author Attribution:</strong> Every card shows the creator's avatar badge so you always know who suggested what.</li>
+            <li><strong>🗑️ Remove Stops:</strong> Click the red trash icon on any card to delete it.</li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 style="color:#4ade80; margin-bottom:0.4rem;">4. Interactive Links &amp; Directions</h4>
+          <ul style="padding-left:1.2rem; line-height:1.5;">
+            <li><strong>Clickable Title (↗):</strong> Click any card title to open its official homepage or primary review in a new tab.</li>
+            <li><strong>🌐 [Website / Source] ↗:</strong> Blue link pill directly accessing the venue's web page or guide.</li>
+            <li><strong>📍 Maps &amp; Directions ↗:</strong> Amber link pill opening Google Maps navigation from your active hotel.</li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 style="color:#f43f5e; margin-bottom:0.4rem;">5. Autonomous Cultural Scout &amp; Daily Scanner</h4>
+          <ul style="padding-left:1.2rem; line-height:1.5;">
+            <li><strong>City-Scoped Search:</strong> Search guides, blogs, Reddit, or TikTok trends for specific cities.</li>
+            <li><strong>⚡ Daily Autonomous Scan:</strong> Click the glowing scan button to analyze all trip cities at once and import new festivals, concerts, and pop-ups directly to your wishlist.</li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 style="color:#a855f7; margin-bottom:0.4rem;">6. Multi-User Collaboration</h4>
+          <ul style="padding-left:1.2rem; line-height:1.5;">
+            <li><strong>👥 Share &amp; Invite:</strong> Invite friends by email with Editor or Viewer roles.</li>
+            <li><strong>Switch User Dropdown:</strong> Switch accounts or add new traveler profiles on the fly to simulate real-time teamwork.</li>
+          </ul>
+        </div>
+
+      </div>
+      <div class="modal-actions" style="margin-top:1rem;">
+        <button type="button" class="btn btn-primary" id="closeHelpModalBtn2">Got It!</button>
+      </div>
     </div>
   </div>
 

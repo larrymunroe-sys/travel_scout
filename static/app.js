@@ -635,6 +635,16 @@ function initModals() {
       }
     });
   }
+
+  // Help Guide Modal
+  const helpModal = document.getElementById("helpModal");
+  const openHelpBtn = document.getElementById("openHelpBtn");
+  const closeHelpModalBtn = document.getElementById("closeHelpModalBtn");
+  const closeHelpModalBtn2 = document.getElementById("closeHelpModalBtn2");
+
+  if (openHelpBtn) openHelpBtn.addEventListener("click", () => helpModal.style.display = "flex");
+  if (closeHelpModalBtn) closeHelpModalBtn.addEventListener("click", () => helpModal.style.display = "none");
+  if (closeHelpModalBtn2) closeHelpModalBtn2.addEventListener("click", () => helpModal.style.display = "none");
 }
 
 function openAddStayModal(cityId, cityName) {
