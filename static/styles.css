@@ -515,6 +515,89 @@ body {
   font-weight: 700;
   font-size: 1rem;
   color: var(--text-main);
+  line-height: 1.35;
+}
+
+.card-title-link {
+  color: var(--text-main);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  transition: all var(--transition);
+}
+
+.card-title-link:hover {
+  color: #38bdf8;
+}
+
+.card-link-icon {
+  font-size: 0.8rem;
+  opacity: 0.65;
+  transition: transform var(--transition), opacity var(--transition);
+}
+
+.card-title-link:hover .card-link-icon {
+  opacity: 1;
+  transform: translate(2px, -2px);
+}
+
+/* Item Links Row */
+.card-links-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  margin-top: 0.15rem;
+}
+
+.item-link-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.73rem;
+  font-weight: 600;
+  padding: 0.22rem 0.55rem;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  transition: all var(--transition);
+  line-height: 1.3;
+}
+
+.item-link-pill.primary {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+.item-link-pill.primary:hover {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: #38bdf8;
+  transform: translateY(-1px);
+}
+
+.item-link-pill.maps {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.25);
+}
+
+.item-link-pill.maps:hover {
+  background: rgba(251, 191, 36, 0.22);
+  border-color: #fbbf24;
+  transform: translateY(-1px);
+}
+
+.item-link-pill.neutral {
+  background: rgba(255, 255, 255, 0.06);
+  color: #cbd5e1;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.item-link-pill.neutral:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  transform: translateY(-1px);
 }
 
 .card-city-badge {

@@ -204,7 +204,11 @@ function renderCitiesTab() {
         ${city.stays.map(stay => `
           <div class="stay-box">
             <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-              <div class="stay-box-title">🏨 ${escapeHtml(stay.name)}</div>
+              <div class="stay-box-title">
+                <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stay.name + ' ' + stay.address)}" target="_blank" rel="noopener noreferrer" class="card-title-link" title="Open hotel in Google Maps">
+                  🏨 ${escapeHtml(stay.name)} <span class="card-link-icon">↗</span>
+                </a>
+              </div>
               ${city.stays.length > 1 ? `
                 <button onclick="deleteStay('${stay.id}')" style="background:none; border:none; color:#f43f5e; cursor:pointer; font-size:0.8rem;" title="Delete this stay">&times;</button>
               ` : ''}
@@ -212,6 +216,11 @@ function renderCitiesTab() {
             <div class="stay-box-dates">Check-in: ${stay.start_date} &bull; Check-out: ${stay.end_date}</div>
             <div class="stay-box-address">📍 ${escapeHtml(stay.address)}</div>
             ${stay.notes ? `<div style="font-size:0.75rem; color:#94a3b8; margin-top:0.3rem;"><em>${escapeHtml(stay.notes)}</em></div>` : ''}
+            <div style="margin-top:0.5rem;">
+              <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stay.name + ' ' + stay.address)}" target="_blank" rel="noopener noreferrer" class="item-link-pill maps" style="font-size:0.7rem; padding:0.18rem 0.45rem;">
+                📍 Open in Google Maps ↗
+              </a>
+            </div>
           </div>
         `).join("")}
       </div>
@@ -278,14 +287,33 @@ function renderCard(item, availableDates) {
   const author = item.added_by || { name: "Traveler", avatar_color: "#38bdf8" };
   const transit = item.transit || {};
 
+  const hasDirectUrl = Boolean(item.url && item.url.trim() !== "");
+  const targetUrl = hasDirectUrl
+    ? item.url
+    : `https://www.google.com/search?q=${encodeURIComponent(item.title + ' ' + (item.city_name || ''))}`;
+
+  let mapsUrl = "";
+  if (item.lat && item.lon) {
+    mapsUrl = `https://www.google.com/maps/search/?api=1&query=${item.lat},${item.lon}`;
+  } else {
+    mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.title + ' ' + (item.address || item.city_name || ''))}`;
+  }
+
+  const sourceLabel = item.source_platform ? escapeHtml(item.source_platform) : "Website";
+
   return `
     <div class="itin-card" data-item-id="${item.id}">
       <div class="card-top-row">
         <div>
-          <div class="card-title">${escapeHtml(item.title)}</div>
-          <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.2rem;">
+          <div class="card-title">
+            <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" class="card-title-link" title="Open ${escapeHtml(item.title)} link">
+              ${escapeHtml(item.title)}
+              <span class="card-link-icon">↗</span>
+            </a>
+          </div>
+          <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.25rem;">
             <span>📍 ${escapeHtml(item.neighborhood || item.city_name || 'City')}</span> &bull; 
-            <span style="color:#fbbf24; font-weight:600;">${item.cost || 'Free'}</span>
+            <span style="color:#fbbf24; font-weight:600;">${escapeHtml(item.cost || 'Free')}</span>
           </div>
         </div>
         <span class="card-city-badge">${escapeHtml(item.city_name || 'General')}</span>
@@ -302,6 +330,22 @@ function renderCard(item, availableDates) {
           ${escapeHtml(item.highlight)}
         </div>
       ` : ''}
+
+      <!-- Item Direct Links Row -->
+      <div class="card-links-row">
+        ${hasDirectUrl ? `
+          <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" class="item-link-pill primary" title="Visit official source or guide">
+            🌐 ${sourceLabel} ↗
+          </a>
+        ` : `
+          <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" class="item-link-pill neutral" title="Search web for info">
+            🔍 Web Info ↗
+          </a>
+        `}
+        <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" class="item-link-pill maps" title="Open location in Google Maps">
+          📍 Maps &amp; Directions ↗
+        </a>
+      </div>
 
       <div class="card-footer-actions">
         <!-- Author Avatar Tag -->
@@ -665,21 +709,39 @@ function initScout() {
         if (data.results.length === 0) {
           grid.innerHTML = `<p style="grid-column:1/-1; text-align:center; color:var(--text-muted); padding:2rem;">No live web results returned for '${escapeHtml(q)}'. Try other keywords.</p>`;
         } else {
-          grid.innerHTML = data.results.map(r => `
-            <div class="itin-card">
-              <div class="card-top-row">
-                <div class="card-title">${escapeHtml(r.title)}</div>
-                <span class="card-city-badge">${escapeHtml(city)}</span>
+          grid.innerHTML = data.results.map(r => {
+            const hasUrl = Boolean(r.url && r.url.trim() !== "");
+            const targetUrl = hasUrl ? r.url : `https://www.google.com/search?q=${encodeURIComponent(r.title + ' ' + city)}`;
+            const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.title + ' ' + (r.address || city))}`;
+            return `
+              <div class="itin-card">
+                <div class="card-top-row">
+                  <div class="card-title">
+                    <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" class="card-title-link" title="Open ${escapeHtml(r.title)}">
+                      ${escapeHtml(r.title)}
+                      <span class="card-link-icon">↗</span>
+                    </a>
+                  </div>
+                  <span class="card-city-badge">${escapeHtml(city)}</span>
+                </div>
+                <div style="font-size:0.8rem; color:#38bdf8;">Platform: <strong>${escapeHtml(r.source_platform)}</strong></div>
+                <p style="font-size:0.82rem; color:var(--text-muted);">${escapeHtml(r.highlight)}</p>
+                <div class="card-links-row">
+                  <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" class="item-link-pill primary" title="View on source platform">
+                    🌐 ${escapeHtml(r.source_platform || 'Web Source')} ↗
+                  </a>
+                  <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" class="item-link-pill maps" title="Open in Google Maps">
+                    📍 Maps ↗
+                  </a>
+                </div>
+                <div class="card-footer-actions">
+                  <button class="btn btn-primary btn-sm" onclick='addToWishlist(${JSON.stringify(r).replace(/'/g, "&apos;")})'>
+                    ➕ Add to To-Do List
+                  </button>
+                </div>
               </div>
-              <div style="font-size:0.8rem; color:#38bdf8;">Platform: <strong>${r.source_platform}</strong></div>
-              <p style="font-size:0.82rem; color:var(--text-muted);">${escapeHtml(r.highlight)}</p>
-              <div class="card-footer-actions">
-                <button class="btn btn-primary btn-sm" onclick='addToWishlist(${JSON.stringify(r).replace(/'/g, "&apos;")})'>
-                  ➕ Add to To-Do List
-                </button>
-              </div>
-            </div>
-          `).join("");
+            `;
+          }).join("");
         }
       } catch (err) {
         loading.style.display = "none";
@@ -827,11 +889,16 @@ async function renderMapLocations() {
         L.marker([s.lat, s.lon], { icon: hotelIcon })
           .addTo(mapMarkersGroup)
           .bindPopup(`
-            <div style="color:#020617; padding:0.4rem;">
+            <div style="color:#020617; padding:0.4rem; min-width:180px;">
               <strong style="color:#0284c7; font-size:1rem;">🏨 ${escapeHtml(s.name)}</strong>
-              <div style="font-size:0.8rem; color:#475569;">📍 ${escapeHtml(s.address)}</div>
+              <div style="font-size:0.8rem; color:#475569; margin-top:0.2rem;">📍 ${escapeHtml(s.address)}</div>
               <div style="font-size:0.75rem; color:#d97706; font-weight:bold; margin-top:0.3rem;">📅 Active: ${s.start_date} &rarr; ${s.end_date}</div>
               ${s.notes ? `<div style="font-size:0.75rem; color:#64748b; margin-top:0.2rem;">${escapeHtml(s.notes)}</div>` : ''}
+              <div style="margin-top:0.5rem;">
+                <a href="https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lon}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#0284c7; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600; display:inline-block;">
+                  📍 Google Maps Directions ↗
+                </a>
+              </div>
             </div>
           `);
       }
@@ -848,20 +915,33 @@ async function renderMapLocations() {
           iconAnchor: [12, 12]
         });
 
+        const targetUrl = it.url || `https://www.google.com/search?q=${encodeURIComponent(it.title + ' ' + it.city_name)}`;
+
         L.marker([it.lat, it.lon], { icon: itemIcon })
           .addTo(mapMarkersGroup)
           .bindPopup(`
-            <div style="color:#020617; padding:0.4rem;">
+            <div style="color:#020617; padding:0.4rem; min-width:180px;">
               <strong style="font-size:0.95rem;">${escapeHtml(it.title)}</strong>
-              <div style="font-size:0.8rem; color:#475569;">${escapeHtml(it.city_name)} &bull; ${it.cost}</div>
-              <div style="font-size:0.75rem; color:#0284c7; margin-top:0.3rem;">👤 Added by: ${escapeHtml(it.added_by.name)}</div>
+              <div style="font-size:0.8rem; color:#475569; margin-top:0.2rem;">${escapeHtml(it.city_name)} &bull; ${escapeHtml(it.cost || 'Free')}</div>
+              <div style="font-size:0.75rem; color:#0284c7; margin-top:0.25rem;">👤 Added by: ${escapeHtml(it.added_by.name)}</div>
+              <div style="margin-top:0.5rem; display:flex; gap:0.4rem; flex-wrap:wrap;">
+                <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#0284c7; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;">
+                  🌐 Website ↗
+                </a>
+                <a href="https://www.google.com/maps/search/?api=1&query=${it.lat},${it.lon}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#f59e0b; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;">
+                  📍 Directions ↗
+                </a>
+              </div>
             </div>
           `);
 
         sidebarItemsHtml.push(`
           <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:6px; padding:0.6rem; cursor:pointer;" onclick="zoomToCoord(${it.lat}, ${it.lon})">
-            <div style="font-weight:600; font-size:0.85rem; color:var(--text-main);">${escapeHtml(it.title)}</div>
-            <div style="font-size:0.75rem; color:var(--text-muted);">${escapeHtml(it.city_name)} &bull; ${it.cost}</div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div style="font-weight:600; font-size:0.85rem; color:var(--text-main);">${escapeHtml(it.title)}</div>
+              <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="color:#38bdf8; font-size:0.75rem; text-decoration:none; padding:0.1rem 0.3rem;" title="Open site">↗</a>
+            </div>
+            <div style="font-size:0.75rem; color:var(--text-muted);">${escapeHtml(it.city_name)} &bull; ${escapeHtml(it.cost || 'Free')}</div>
           </div>
         `);
       }
