@@ -6,7 +6,7 @@ import uvicorn
 from database.connection import init_db, SessionLocal
 from scout.engine import ScoutEngine
 
-def find_available_port(host: str = "127.0.0.1", start_port: int = 8001, max_port: int = 8030) -> int:
+def find_available_port(host: str = "127.0.0.1", start_port: int = 8000, max_port: int = 8030) -> int:
     """Find the first available TCP port to prevent collisions with other servers."""
     for port in range(start_port, max_port + 1):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:

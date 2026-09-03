@@ -94,14 +94,31 @@ async function loginAs(email, name) {
   }
 }
 
-// 3. Load Trip Details
+// 3. Load Trip Details & Switcher
+async function loadTripsDropdown() {
+  const switcher = document.getElementById("tripSwitcherSelect");
+  if (!switcher) return;
+  try {
+    const res = await fetch("/api/trips");
+    const trips = await res.json();
+    switcher.innerHTML = trips.map(t => `<option value="${t.id}">${escapeHtml(t.title)} (${t.cities_count} cities)</option>`).join("");
+    if (currentTripId) switcher.value = currentTripId;
+    switcher.onchange = async (e) => {
+      currentTripId = e.target.value;
+      await refreshTrip();
+    };
+  } catch (err) {
+    console.error("Failed to load trips dropdown:", err);
+  }
+}
+
 async function loadInitialTrip() {
   try {
     const res = await fetch("/api/trips");
     const trips = await res.json();
     if (trips.length > 0) {
       currentTripId = trips[0].id;
-      document.getElementById("tripSubtitle").textContent = trips[0].title;
+      await loadTripsDropdown();
       await refreshTrip();
     }
   } catch (err) {
@@ -114,6 +131,19 @@ async function refreshTrip() {
   try {
     const res = await fetch(`/api/trips/${currentTripId}`);
     currentTripData = await res.json();
+
+    if (currentTripData.trip) {
+      const sub = document.getElementById("tripSubtitle");
+      if (sub) {
+        const desc = currentTripData.trip.description ? ` &bull; ${escapeHtml(currentTripData.trip.description)}` : "";
+        sub.innerHTML = `${escapeHtml(currentTripData.trip.title)}${desc}`;
+      }
+    }
+
+    const switcher = document.getElementById("tripSwitcherSelect");
+    if (switcher && switcher.value !== currentTripId) {
+      switcher.value = currentTripId;
+    }
 
     renderCollaborators();
     renderCitiesTab();
@@ -466,6 +496,98 @@ function initModals() {
         }
       } catch (err) {
         alert("Error inviting collaborator: " + err.message);
+      }
+    });
+  }
+
+  // Edit Trip Modal
+  const editTripModal = document.getElementById("editTripModal");
+  const openEditTripBtn = document.getElementById("openEditTripBtn");
+  const closeEditTripBtn = document.getElementById("closeEditTripBtn");
+  const cancelEditTripBtn = document.getElementById("cancelEditTripBtn");
+  const editTripForm = document.getElementById("editTripForm");
+
+  if (openEditTripBtn) {
+    openEditTripBtn.addEventListener("click", () => {
+      if (currentTripData && currentTripData.trip) {
+        document.getElementById("editTripTitleInput").value = currentTripData.trip.title || "";
+        document.getElementById("editTripDescInput").value = currentTripData.trip.description || "";
+      }
+      editTripModal.style.display = "flex";
+    });
+  }
+  if (closeEditTripBtn) closeEditTripBtn.addEventListener("click", () => editTripModal.style.display = "none");
+  if (cancelEditTripBtn) cancelEditTripBtn.addEventListener("click", () => editTripModal.style.display = "none");
+
+  if (editTripForm) {
+    editTripForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const title = document.getElementById("editTripTitleInput").value.trim();
+      const description = document.getElementById("editTripDescInput").value.trim();
+      try {
+        const res = await fetch(`/api/trips/${currentTripId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, description })
+        });
+        if (res.ok) {
+          editTripModal.style.display = "none";
+          await loadTripsDropdown();
+          await refreshTrip();
+        } else {
+          alert("Failed to update trip details");
+        }
+      } catch (err) {
+        alert("Error updating trip: " + err.message);
+      }
+    });
+  }
+
+  // Create Trip Modal
+  const createTripModal = document.getElementById("createTripModal");
+  const openCreateTripBtn = document.getElementById("openCreateTripBtn");
+  const closeCreateTripBtn = document.getElementById("closeCreateTripBtn");
+  const cancelCreateTripBtn = document.getElementById("cancelCreateTripBtn");
+  const createTripForm = document.getElementById("createTripForm");
+
+  if (openCreateTripBtn) openCreateTripBtn.addEventListener("click", () => createTripModal.style.display = "flex");
+  if (closeCreateTripBtn) closeCreateTripBtn.addEventListener("click", () => createTripModal.style.display = "none");
+  if (cancelCreateTripBtn) cancelCreateTripBtn.addEventListener("click", () => createTripModal.style.display = "none");
+
+  if (createTripForm) {
+    createTripForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const title = document.getElementById("newTripTitle").value.trim();
+      const first_city_name = document.getElementById("newTripCity").value.trim();
+      const start_date = document.getElementById("newTripStart").value;
+      const end_date = document.getElementById("newTripEnd").value;
+      const hotel_name = document.getElementById("newTripHotel").value.trim();
+
+      try {
+        const res = await fetch("/api/trips", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title,
+            first_city_name,
+            start_date,
+            end_date,
+            hotel_name,
+            hotel_address: hotel_name
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          createTripModal.style.display = "none";
+          createTripForm.reset();
+          currentTripId = data.trip_id;
+          await loadTripsDropdown();
+          await refreshTrip();
+        } else {
+          alert("Failed to create new trip");
+        }
+      } catch (err) {
+        alert("Error creating trip: " + err.message);
       }
     });
   }

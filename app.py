@@ -67,6 +67,20 @@ class DevLoginPayload(BaseModel):
     name: str
     avatar_color: Optional[str] = "#38bdf8"
 
+class CreateTripPayload(BaseModel):
+    title: str
+    description: Optional[str] = None
+    first_city_name: Optional[str] = None
+    country: Optional[str] = "Portugal"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    hotel_name: Optional[str] = None
+    hotel_address: Optional[str] = None
+
+class UpdateTripPayload(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+
 class AddCityPayload(BaseModel):
     city_name: str
     country: str = "Portugal"
@@ -208,6 +222,52 @@ async def list_trips(db: Session = Depends(get_db)):
         }
         for t in trips
     ]
+
+@app.post("/api/trips")
+async def create_trip(payload: CreateTripPayload, request: Request, db: Session = Depends(get_db)):
+    """Create a new custom journey with editable title, description, and first city."""
+    user = get_current_user(request, db)
+    trip = Trip(
+        title=payload.title,
+        description=payload.description or f"Custom itinerary designed by {user.name}",
+        owner_id=user.id
+    )
+    db.add(trip)
+    db.commit()
+    db.refresh(trip)
+
+    collab = TripCollaborator(trip_id=trip.id, user_id=user.id, role="owner")
+    db.add(collab)
+    db.commit()
+
+    if payload.first_city_name and payload.start_date and payload.end_date:
+        scout_engine.add_city(
+            db=db,
+            trip_id=trip.id,
+            city_name=payload.first_city_name,
+            country=payload.country or "Country",
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+            hotel_name=payload.hotel_name or f"{payload.first_city_name} Hotel",
+            hotel_address=payload.hotel_address or f"{payload.first_city_name}"
+        )
+
+    return {"status": "created", "trip_id": trip.id, "title": trip.title}
+
+@app.put("/api/trips/{trip_id}")
+async def update_trip(trip_id: str, payload: UpdateTripPayload, db: Session = Depends(get_db)):
+    """Update trip title and description."""
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    if payload.title:
+        trip.title = payload.title
+    if payload.description is not None:
+        trip.description = payload.description
+
+    db.commit()
+    return {"status": "updated", "trip_id": trip.id, "title": trip.title}
 
 @app.get("/api/trips/{trip_id}")
 async def get_trip_details(trip_id: str, db: Session = Depends(get_db)):

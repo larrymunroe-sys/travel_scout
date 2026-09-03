@@ -17,7 +17,12 @@
       <div class="logo-block">
         <div class="logo-badge">🌍</div>
         <div>
-          <h1 class="logo-title">Travel Scout</h1>
+          <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+            <h1 class="logo-title">Travel Scout</h1>
+            <button id="openEditTripBtn" class="btn btn-secondary btn-sm" style="padding:0.2rem 0.55rem; font-size:0.75rem;" title="Rename journey or edit description">✏️ Customize</button>
+            <button id="openCreateTripBtn" class="btn btn-secondary btn-sm" style="padding:0.2rem 0.55rem; font-size:0.75rem;" title="Start a fresh trip from scratch">➕ New Trip</button>
+            <select id="tripSwitcherSelect" class="user-switcher" style="padding:0.25rem 0.5rem; font-size:0.75rem; border-radius:6px; background:rgba(255,255,255,0.06); border:1px solid var(--border); color:var(--text-main);" title="Switch between saved itineraries"></select>
+          </div>
           <p class="logo-subtitle" id="tripSubtitle">Portugal Grand Expedition &bull; Lisbon &rarr; Porto &rarr; Bragança</p>
         </div>
       </div>
@@ -322,6 +327,71 @@
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" id="cancelInviteBtn">Cancel</button>
           <button type="submit" class="btn btn-primary">Send Invite & Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 4: EDIT TRIP -->
+  <div class="modal-overlay" id="editTripModal" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>✏️ Customize Trip Details</h3>
+        <button class="modal-close" id="closeEditTripBtn">&times;</button>
+      </div>
+      <form id="editTripForm">
+        <div class="form-group">
+          <label>Trip Title</label>
+          <input type="text" id="editTripTitleInput" placeholder="e.g. Portugal Grand Expedition" required />
+        </div>
+        <div class="form-group">
+          <label>Description / Trip Purpose</label>
+          <input type="text" id="editTripDescInput" placeholder="e.g. Cultural journey with fado, food, and wine" />
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="cancelEditTripBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 5: CREATE NEW CUSTOM TRIP -->
+  <div class="modal-overlay" id="createTripModal" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>✨ Start a New Custom Journey</h3>
+        <button class="modal-close" id="closeCreateTripBtn">&times;</button>
+      </div>
+      <form id="createTripForm">
+        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+          Create a fresh itinerary from scratch for any region or country!
+        </p>
+        <div class="form-group">
+          <label>Trip Name</label>
+          <input type="text" id="newTripTitle" placeholder="e.g. Japan Cherry Blossom & Culinary Tour" required />
+        </div>
+        <div class="form-group">
+          <label>First Destination City</label>
+          <input type="text" id="newTripCity" placeholder="e.g. Tokyo" required />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Start Date</label>
+            <input type="date" id="newTripStart" required />
+          </div>
+          <div class="form-group">
+            <label>End Date</label>
+            <input type="date" id="newTripEnd" required />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Starting Hotel Name</label>
+          <input type="text" id="newTripHotel" placeholder="e.g. Hotel Gracery Shinjuku" required />
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="cancelCreateTripBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Journey</button>
         </div>
       </form>
     </div>
