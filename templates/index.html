@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Travel Scout | Multi-City Collaborative Journey Planner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="logo-block">
+        <div class="logo-badge">🌍</div>
+        <div>
+          <h1 class="logo-title">Travel Scout</h1>
+          <p class="logo-subtitle" id="tripSubtitle">Portugal Grand Expedition &bull; Lisbon &rarr; Porto &rarr; Bragança</p>
+        </div>
+      </div>
+
+      <!-- Collaborators & Active User Controls -->
+      <div class="header-right">
+        <!-- Collaborator Avatars Bar -->
+        <div class="collaborators-bar" id="collaboratorsBar" title="Collaborators sharing this itinerary">
+          <!-- Injected via JavaScript -->
+        </div>
+
+        <button id="openInviteBtn" class="btn btn-secondary btn-sm">
+          👥 Share & Invite
+        </button>
+
+        <!-- Current User Profile & Switcher -->
+        <div class="user-profile-menu">
+          <div class="user-avatar-badge" id="currentUserAvatar" style="background: {{ current_user.avatar_color }};">
+            {{ current_user.name[:2].upper() }}
+          </div>
+          <div class="user-meta">
+            <span class="user-name" id="currentUserName">{{ current_user.name }}</span>
+            <span class="user-role">Owner</span>
+          </div>
+          <select id="userSwitcherSelect" class="user-switcher" title="Simulate multi-user collaboration by switching accounts">
+            <option value="" disabled selected>Switch User...</option>
+            {% for u in all_users %}
+            <option value="{{ u.email }}">{{ u.name }} ({{ u.email }})</option>
+            {% endfor %}
+            <option value="new">+ Add New Collaborator Account</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <div class="main-tabs-wrapper">
+    <div class="main-tabs">
+      <button class="nav-tab active" data-tab="cities">🏙️ Cities & Stays</button>
+      <button class="nav-tab" data-tab="itinerary">📅 Collaborative Itinerary</button>
+      <button class="nav-tab" data-tab="map">🗺️ Multi-City Map</button>
+      <button class="nav-tab" data-tab="scout">🌐 City Event Scout</button>
+    </div>
+  </div>
+
+  <main class="main-container">
+    <!-- TAB 1: CITIES & STAYS MANAGER -->
+    <section id="tab-cities" class="tab-content active">
+      <div class="section-header">
+        <div>
+          <h2>Destination Cities & Accommodations</h2>
+          <p>Add multiple cities, manage date ranges, and configure hotels. Moving hotels midway? Add multiple stays by date!</p>
+        </div>
+        <button id="openAddCityBtn" class="btn btn-primary">
+          ➕ Add Destination City
+        </button>
+      </div>
+
+      <!-- City Segments List -->
+      <div class="cities-container" id="citiesList">
+        <!-- Injected via JavaScript -->
+      </div>
+    </section>
+
+    <!-- TAB 2: COLLABORATIVE ITINERARY -->
+    <section id="tab-itinerary" class="tab-content">
+      <div class="section-header">
+        <div>
+          <h2>Collaborative Itinerary & Wishlist</h2>
+          <p>Every activity displays the author's avatar icon. Transit is automatically calculated from that day's active hotel!</p>
+        </div>
+        <div class="itinerary-controls">
+          <select id="itineraryCityFilter">
+            <option value="all">🌐 All Cities (Unified View)</option>
+          </select>
+          <button id="openAddItemBtn" class="btn btn-primary">
+            ➕ Add Custom Item
+          </button>
+        </div>
+      </div>
+
+      <!-- To-Do / Bucket List Section -->
+      <div class="todo-section">
+        <div class="todo-header">
+          <h3>📋 Unscheduled Bucket List & To-Do</h3>
+          <span class="badge" id="todoCountBadge">0 Items</span>
+        </div>
+        <div id="todoGrid" class="cards-grid">
+          <!-- Injected via JavaScript -->
+        </div>
+      </div>
+
+      <!-- Day-by-Day Timeline -->
+      <div class="days-container" id="daysContainer">
+        <!-- Injected via JavaScript -->
+      </div>
+    </section>
+
+    <!-- TAB 3: MULTI-CITY MAP -->
+    <section id="tab-map" class="tab-content">
+      <div class="map-controls-card">
+        <div class="map-controls-row">
+          <div class="map-filter-group">
+            <label><strong>🏙️ Focus City:</strong></label>
+            <select id="mapCityJump">
+              <option value="all">🌍 Whole Journey Overview</option>
+            </select>
+          </div>
+          <div class="map-filter-group">
+            <label><strong>📅 Day Filter:</strong></label>
+            <select id="mapDaySelect">
+              <option value="all">All Dates</option>
+              <option value="todo">To-Do Items</option>
+            </select>
+          </div>
+          <div class="map-toggles">
+            <label class="toggle-label">
+              <input type="checkbox" id="mapRouteCheck" checked>
+              <span class="toggle-text">🚶 Draw Route Path</span>
+            </label>
+            <label class="toggle-label">
+              <input type="checkbox" id="mapStaysCheck" checked>
+              <span class="toggle-text">🏨 Show Hotels</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="map-layout">
+        <div id="scoutMap" class="map-canvas"></div>
+        <div class="map-sidebar">
+          <div class="map-sidebar-header">
+            <h4>Stops & Highlights</h4>
+            <span id="mapSidebarCount" class="badge">0 Stops</span>
+          </div>
+          <div id="mapSidebarList" class="map-sidebar-list">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: CITY SCOUT & DAILY SCANNER -->
+    <section id="tab-scout" class="tab-content">
+      <div class="scout-hero">
+        <h2>🌐 City-Scoped Live Event Scout</h2>
+        <p>Discover live events, wine tastings, fado nights, and food pop-ups tailored to any destination city across guides, Reddit, blogs, and TikTok.</p>
+
+        <div style="margin-bottom: 1.25rem; display: flex; justify-content: center; gap: 0.75rem;">
+          <button type="button" id="runMultiDailyScanBtn" class="btn btn-daily-scan">
+            ⚡ Run Daily Autonomous Scan (All Trip Cities)
+          </button>
+        </div>
+
+        <div class="scout-form">
+          <select id="scoutTargetCity">
+            <!-- Injected via JavaScript -->
+          </select>
+          <input type="text" id="scoutQueryInput" placeholder="Try: 'Fado in Alfama', 'Port wine tastings Gaia', 'Medieval festival Bragança', 'Reddit food'" />
+          <select id="scoutChannelSelect">
+            {% for k, v in search_channels.items() %}
+            <option value="{{ k }}">{{ v.label }}</option>
+            {% endfor %}
+          </select>
+          <select id="scoutCategorySelect">
+            <option value="">Auto-detect category</option>
+            {% for k, v in categories.items() %}
+            <option value="{{ k }}">{{ v.icon }} {{ v.label }}</option>
+            {% endfor %}
+          </select>
+          <button id="runScoutBtn" class="btn btn-primary">Scout City 🚀</button>
+        </div>
+
+        <div class="scout-suggestions">
+          <span style="font-size:0.8rem; color:var(--text-muted);">Quick Scout:</span>
+          <button type="button" class="scout-chip" data-city="Lisbon" data-q="authentic Fado clubs Alfama" data-ch="blogs">🎶 Lisbon Fado</button>
+          <button type="button" class="scout-chip" data-city="Porto" data-q="best Port wine cellars Vila Nova de Gaia" data-ch="guides">🍷 Porto Cellars</button>
+          <button type="button" class="scout-chip" data-city="Bragança" data-q="Posta Mirandesa traditional restaurant" data-ch="reddit">🥩 Bragança Veal</button>
+          <button type="button" class="scout-chip" data-city="Lisbon" data-q="Reddit hidden gems secret viewpoints" data-ch="reddit">💎 Lisbon Gems</button>
+        </div>
+      </div>
+
+      <div id="scoutLoading" class="loading-state" style="display:none;">
+        <div class="spinner"></div>
+        <p>Scouting live internet feeds for the chosen destination city...</p>
+      </div>
+
+      <div id="scoutResultsGrid" class="cards-grid">
+        <!-- Injected via JS -->
+      </div>
+    </section>
+  </main>
+
+  <!-- MODAL 1: ADD CITY -->
+  <div class="modal-overlay" id="addCityModal" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>➕ Add Destination City</h3>
+        <button class="modal-close" id="closeAddCityBtn">&times;</button>
+      </div>
+      <form id="addCityForm">
+        <div class="form-group">
+          <label>City Name</label>
+          <input type="text" id="newCityName" placeholder="e.g. Sintra, Coimbra, Faro, Barcelona" required />
+        </div>
+        <div class="form-group">
+          <label>Country</label>
+          <input type="text" id="newCityCountry" value="Portugal" required />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Start Date</label>
+            <input type="date" id="newCityStart" required />
+          </div>
+          <div class="form-group">
+            <label>End Date</label>
+            <input type="date" id="newCityEnd" required />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Starting Hotel / Accommodation Name</label>
+          <input type="text" id="newCityHotel" placeholder="e.g. Tivoli Palácio de Seteais" required />
+        </div>
+        <div class="form-group">
+          <label>Hotel Address</label>
+          <input type="text" id="newCityAddress" placeholder="e.g. Rua Barbosa du Bocage 8, Sintra" required />
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="cancelAddCityBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add City to Journey</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 2: ADD HOTEL/STAY TO CITY -->
+  <div class="modal-overlay" id="addStayModal" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>🏨 Add Another Hotel / Stay by Date</h3>
+        <button class="modal-close" id="closeAddStayBtn">&times;</button>
+      </div>
+      <form id="addStayForm">
+        <input type="hidden" id="stayCityId" />
+        <div class="form-group">
+          <label>Hotel / Airbnb Name</label>
+          <input type="text" id="stayNameInput" placeholder="e.g. Bairro Alto Boutique Hotel" required />
+        </div>
+        <div class="form-group">
+          <label>Address</label>
+          <input type="text" id="stayAddressInput" placeholder="e.g. Praça Luís de Camões, Lisboa" required />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Check-in Date</label>
+            <input type="date" id="stayStartInput" required />
+          </div>
+          <div class="form-group">
+            <label>Check-out Date</label>
+            <input type="date" id="stayEndInput" required />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Notes / Why Moving Here</label>
+          <input type="text" id="stayNotesInput" placeholder="e.g. Closer to nightlife, ocean views, etc." />
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="cancelAddStayBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Stay Location</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 3: INVITE COLLABORATOR -->
+  <div class="modal-overlay" id="inviteModal" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>👥 Share Itinerary & Invite Collaborator</h3>
+        <button class="modal-close" id="closeInviteModalBtn">&times;</button>
+      </div>
+      <form id="inviteForm">
+        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+          Invite friends or travel companions by Gmail. Anyone invited can add wishlist items, assign dates, and co-plan simultaneously!
+        </p>
+        <div class="form-group">
+          <label>Gmail / Email Address</label>
+          <input type="email" id="inviteEmail" placeholder="partner@gmail.com" required />
+        </div>
+        <div class="form-group">
+          <label>Name</label>
+          <input type="text" id="inviteName" placeholder="e.g. Sarah Chen" />
+        </div>
+        <div class="form-group">
+          <label>Role</label>
+          <select id="inviteRole">
+            <option value="editor">Editor (Can add & edit stops)</option>
+            <option value="viewer">Viewer (Read-only)</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="cancelInviteBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary">Send Invite & Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <footer class="app-footer">
+    <p>Travel Scout &bull; Multi-City Collaborative Platform &bull; Date-Matched Accommodations &bull; Real-Time Multi-User Planning</p>
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

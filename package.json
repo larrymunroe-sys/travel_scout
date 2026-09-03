@@ -1,0 +1,22 @@
+{
+  "name": "travel-scout",
+  "version": "1.0.0",
+  "description": "Multi-City Collaborative Travel Scout Platform",
+  "main": "main.py",
+  "scripts": {
+    "start": "python main.py web",
+    "dev": "python main.py web",
+    "scan": "python main.py scan"
+  },
+  "keywords": [
+    "travel",
+    "multi-city",
+    "scout",
+    "lisbon",
+    "porto",
+    "braganca",
+    "collaboration"
+  ],
+  "author": "",
+  "license": "ISC"
+}
