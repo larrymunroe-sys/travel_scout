@@ -23,7 +23,7 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
-def run_web(host: str = "127.0.0.1", port: int = 8001):
+def run_web(host: str = "127.0.0.1", port: int = 8000):
     chosen_port = find_available_port(host, port)
     print("=" * 65)
     print("Multi-City Collaborative Travel Scout Agent")
@@ -53,7 +53,7 @@ def main():
 
     web_p = subparsers.add_parser("web", help="Start FastAPI web dashboard")
     web_p.add_argument("--host", default="127.0.0.1")
-    web_p.add_argument("--port", type=int, default=8001)
+    web_p.add_argument("--port", type=int, default=8000)
 
     subparsers.add_parser("scan", help="Run multi-city autonomous scan")
 
