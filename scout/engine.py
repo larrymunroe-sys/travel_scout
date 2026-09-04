@@ -308,6 +308,34 @@ class ScoutEngine:
         db.add(stay)
         db.commit()
 
+        # Auto-seed curated items for this city preset if available
+        preseeded = PRESEEDED_ITEMS.get(city_name, [])
+        if preseeded:
+            trip = db.query(Trip).filter(Trip.id == trip_id).first()
+            owner_id = trip.owner_id if trip else None
+            for item_data in preseeded:
+                item = ItineraryItem(
+                    trip_id=trip_id,
+                    city_segment_id=segment.id,
+                    title=item_data["title"],
+                    category=item_data.get("category", "gems"),
+                    neighborhood=item_data.get("neighborhood"),
+                    address=item_data.get("address"),
+                    lat=item_data.get("lat"),
+                    lon=item_data.get("lon"),
+                    cost=item_data.get("cost", "Free"),
+                    is_free=item_data.get("is_free", False),
+                    time_info=item_data.get("time_info", "Flexible"),
+                    highlight=item_data.get("highlight"),
+                    description=item_data.get("description"),
+                    url=item_data.get("url"),
+                    source_platform=item_data.get("source_platform", "Curated"),
+                    assigned_date="todo",
+                    added_by_user_id=owner_id
+                )
+                db.add(item)
+            db.commit()
+
         return segment
 
     def delete_city(self, db: Session, trip_id: str, city_id: str) -> bool:

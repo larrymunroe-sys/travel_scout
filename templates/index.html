@@ -91,7 +91,8 @@
   <!-- Navigation Tabs -->
   <div class="main-tabs-wrapper">
     <div class="main-tabs">
-      <button class="nav-tab active" data-tab="cities">🏙️ Cities & Stays</button>
+      <button class="nav-tab active" data-tab="explore">🔍 Explore &amp; Discover</button>
+      <button class="nav-tab" data-tab="cities">🏙️ Cities &amp; Stays</button>
       <button class="nav-tab" data-tab="itinerary">📅 Collaborative Itinerary</button>
       <button class="nav-tab" data-tab="map">🗺️ Multi-City Map</button>
       <button class="nav-tab" data-tab="scout">🌐 City Event Scout</button>
@@ -126,8 +127,68 @@
     </div>
     {% endif %}
 
-    <!-- TAB 1: CITIES & STAYS MANAGER -->
-    <section id="tab-cities" class="tab-content active">
+    <!-- TAB 1: EXPLORE & DISCOVER -->
+    <section id="tab-explore" class="tab-content active">
+      <!-- Search & Filter Controls -->
+      <div class="filter-card">
+        <div class="search-row">
+          <div class="search-input-wrapper">
+            <svg class="search-icon" width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <input type="text" id="exploreSearchInput" placeholder="Search venues, attractions, food, wine, historic sights (e.g. 'wine', 'miradouro', 'fado', 'pastéis')..." />
+            <button id="clearExploreSearchBtn" class="btn-clear" style="display:none;" title="Clear search">&times;</button>
+          </div>
+          <div class="filter-dropdowns">
+            <select id="exploreCitySelect" title="Filter by Destination City">
+              <option value="all">🏙️ All Cities</option>
+            </select>
+            <select id="exploreNeighborhoodSelect" title="Filter by Neighborhood">
+              <option value="all">📍 All Neighborhoods</option>
+            </select>
+            <select id="exploreScheduleSelect" title="Filter by Schedule Status">
+              <option value="all">🗓️ All Items</option>
+              <option value="todo">📋 Bucket List (Unscheduled)</option>
+              <option value="scheduled">📅 Scheduled on Itinerary</option>
+            </select>
+            <label class="toggle-label" style="display:inline-flex; align-items:center; gap:0.4rem; cursor:pointer; font-size:0.82rem; color:var(--text-main); user-select:none; background:var(--bg-main); padding:0.55rem 0.85rem; border-radius:var(--radius-sm); border:1px solid var(--border);">
+              <input type="checkbox" id="exploreFreeOnlyToggle" style="accent-color:#38bdf8; cursor:pointer;">
+              <span class="toggle-text">🎟️ Free Only</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Category Pills -->
+        <div class="category-pills" id="exploreCategoryPills" style="margin-top:1rem;">
+          <button class="cat-pill active" data-cat="all">✨ All Discoveries</button>
+          {% for key, val in categories.items() %}
+          <button class="cat-pill" data-cat="{{ key }}">
+            <span>{{ val.icon }}</span> {{ val.label }}
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Results Header -->
+      <div class="results-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.8rem; margin-bottom:1.25rem;">
+        <div class="results-count" style="font-size:0.92rem; color:var(--text-muted); display:flex; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+          <span>Showing <strong id="exploreItemCount" style="color:#38bdf8; font-size:1.05rem;">0</strong> discoveries across trip stops</span>
+          <span id="exploreActiveFilterNote" style="font-size:0.8rem; color:#fde047; display:none;"></span>
+          <button id="clearAllExploreFiltersBtn" class="btn btn-secondary btn-sm" style="display:none; padding:0.2rem 0.6rem; font-size:0.75rem;">✕ Reset Filters</button>
+        </div>
+        <div class="legend" style="display:flex; gap:0.5rem; flex-wrap:wrap; font-size:0.75rem;">
+          <span class="badge badge-curated">🏛️ Curated</span>
+          <span class="badge badge-web">🌐 Live Scout</span>
+          <span class="badge badge-cost" style="border:1px dashed #fbbf24;">💡 Click any badge on a card to filter!</span>
+        </div>
+      </div>
+
+      <!-- Grid of Items -->
+      <div class="cards-grid" id="exploreCardsGrid">
+        <!-- Injected via JavaScript -->
+      </div>
+    </section>
+
+    <!-- TAB 2: CITIES & STAYS MANAGER -->
+    <section id="tab-cities" class="tab-content">
       <div class="section-header">
         <div>
           <h2>Destination Cities & Accommodations</h2>

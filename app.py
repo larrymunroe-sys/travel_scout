@@ -97,6 +97,33 @@ def get_user_accessible_trips(user: User, db: Session) -> List[Trip]:
         collab = TripCollaborator(trip_id=starter_trip.id, user_id=user.id, role="owner")
         db.add(collab)
         db.commit()
+
+        # Provision initial starter cities with pre-curated discoveries
+        try:
+            scout_engine.add_city(
+                db=db,
+                trip_id=starter_trip.id,
+                city_name="Lisbon",
+                country="Portugal",
+                start_date="2027-05-10",
+                end_date="2027-05-14",
+                hotel_name="Heritage Avenida Liberdade Hotel",
+                hotel_address="Av. da Liberdade 28, 1250-145 Lisboa, Portugal"
+            )
+            scout_engine.add_city(
+                db=db,
+                trip_id=starter_trip.id,
+                city_name="Porto",
+                country="Portugal",
+                start_date="2027-05-14",
+                end_date="2027-05-17",
+                hotel_name="The Yeatman Hotel (Gaia)",
+                hotel_address="Rua do Choupelo, 4400-088 Vila Nova de Gaia, Portugal"
+            )
+            db.refresh(starter_trip)
+        except Exception as err:
+            print("Notice: Error initializing starter cities:", err)
+
         trips = [starter_trip]
 
     return trips
@@ -664,6 +691,40 @@ async def get_trip_details(trip_id: str, request: Request, db: Session = Depends
     sorted_dates = sorted(list(all_dates))
 
     # 3. Format Itinerary (Days & To-Do)
+    # If trip has city segments but no items yet, backfill curated discoveries
+    if not trip.items and trip.city_segments:
+        from scout.preseeded_data import PRESEEDED_ITEMS
+        backfilled = False
+        for seg in trip.city_segments:
+            preseeded = PRESEEDED_ITEMS.get(seg.city_name, [])
+            for idx, item_data in enumerate(preseeded):
+                assigned_date = sorted_dates[idx % len(sorted_dates)] if (sorted_dates and idx < len(sorted_dates)) else "todo"
+                it = ItineraryItem(
+                    trip_id=trip.id,
+                    city_segment_id=seg.id,
+                    title=item_data["title"],
+                    category=item_data.get("category", "gems"),
+                    neighborhood=item_data.get("neighborhood"),
+                    address=item_data.get("address"),
+                    lat=item_data.get("lat"),
+                    lon=item_data.get("lon"),
+                    cost=item_data.get("cost", "Free"),
+                    is_free=item_data.get("is_free", False),
+                    time_info=item_data.get("time_info", "Flexible"),
+                    highlight=item_data.get("highlight"),
+                    description=item_data.get("description"),
+                    url=item_data.get("url"),
+                    source_platform=item_data.get("source_platform", "Curated"),
+                    assigned_date=assigned_date,
+                    added_by_user_id=trip.owner_id
+                )
+                db.add(it)
+                backfilled = True
+        if backfilled:
+            db.commit()
+            db.refresh(trip)
+
+    all_items = []
     todo_items = []
     days_map = {d: [] for d in sorted_dates}
 
@@ -726,6 +787,8 @@ async def get_trip_details(trip_id: str, request: Request, db: Session = Depends
             "note_date": note_date_str
         }
 
+        all_items.append(item_dict)
+
         if not item.assigned_date or item.assigned_date == "todo":
             todo_items.append(item_dict)
         elif item.assigned_date in days_map:
@@ -751,6 +814,8 @@ async def get_trip_details(trip_id: str, request: Request, db: Session = Depends
         "collaborators": collabs,
         "cities": cities,
         "available_dates": sorted_dates,
+        "categories": CATEGORIES,
+        "all_items": all_items,
         "itinerary": {
             "todo": todo_items,
             "days": days_list

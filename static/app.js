@@ -6,6 +6,15 @@ let leafletMap = null;
 let mapMarkersGroup = null;
 let mapRouteGroup = null;
 
+// Explore & Discover State
+let exploreSearchQuery = "";
+let exploreCategory = "all";
+let exploreCity = "all";
+let exploreNeighborhood = "all";
+let exploreSchedule = "all";
+let exploreFreeOnly = false;
+let exploreDebounceTimer = null;
+
 document.addEventListener("DOMContentLoaded", async () => {
   // Check for Google OAuth callback parameters in URL
   const urlParams = new URLSearchParams(window.location.search);
@@ -30,6 +39,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   initTabs();
   initModals();
+  initExploreFilters();
   await loadCurrentUser();
   await loadInitialTrip();
   initScout();
@@ -503,6 +513,7 @@ async function refreshTrip() {
     renderCitiesTab();
     renderItineraryTab();
     populateCityDropdowns();
+    renderExploreTab(true);
     if (leafletMap) renderMapLocations();
   } catch (err) {
     console.error("Failed to refresh trip:", err);
@@ -928,6 +939,479 @@ async function deleteItem(itemId) {
   } catch (err) {
     alert("Error deleting item: " + err.message);
   }
+}
+window.deleteItem = deleteItem;
+
+// ==================== EXPLORE & DISCOVER IMPLEMENTATION ====================
+
+function initExploreFilters() {
+  const searchInput = document.getElementById("exploreSearchInput");
+  const clearBtn = document.getElementById("clearExploreSearchBtn");
+  const citySelect = document.getElementById("exploreCitySelect");
+  const neighborhoodSelect = document.getElementById("exploreNeighborhoodSelect");
+  const scheduleSelect = document.getElementById("exploreScheduleSelect");
+  const freeToggle = document.getElementById("exploreFreeOnlyToggle");
+  const resetBtn = document.getElementById("clearAllExploreFiltersBtn");
+
+  if (searchInput) {
+    searchInput.addEventListener("input", (e) => {
+      exploreSearchQuery = e.target.value.trim();
+      if (clearBtn) clearBtn.style.display = exploreSearchQuery ? "block" : "none";
+      clearTimeout(exploreDebounceTimer);
+      exploreDebounceTimer = setTimeout(() => {
+        renderExploreTab(false);
+      }, 200);
+    });
+  }
+
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      if (searchInput) searchInput.value = "";
+      exploreSearchQuery = "";
+      clearBtn.style.display = "none";
+      renderExploreTab(false);
+    });
+  }
+
+  if (citySelect) {
+    citySelect.addEventListener("change", (e) => {
+      exploreCity = e.target.value;
+      renderExploreTab(false);
+    });
+  }
+
+  if (neighborhoodSelect) {
+    neighborhoodSelect.addEventListener("change", (e) => {
+      exploreNeighborhood = e.target.value;
+      renderExploreTab(false);
+    });
+  }
+
+  if (scheduleSelect) {
+    scheduleSelect.addEventListener("change", (e) => {
+      exploreSchedule = e.target.value;
+      renderExploreTab(false);
+    });
+  }
+
+  if (freeToggle) {
+    freeToggle.addEventListener("change", (e) => {
+      exploreFreeOnly = e.target.checked;
+      renderExploreTab(false);
+    });
+  }
+
+  // Category Pills delegation
+  const categoryPillsContainer = document.getElementById("exploreCategoryPills");
+  if (categoryPillsContainer) {
+    categoryPillsContainer.addEventListener("click", (e) => {
+      const pill = e.target.closest(".cat-pill");
+      if (!pill) return;
+      categoryPillsContainer.querySelectorAll(".cat-pill").forEach(p => p.classList.remove("active"));
+      pill.classList.add("active");
+      exploreCategory = pill.dataset.cat || "all";
+      renderExploreTab(false);
+    });
+  }
+
+  if (resetBtn) {
+    resetBtn.addEventListener("click", () => {
+      resetExploreFilters();
+    });
+  }
+}
+
+function resetExploreFilters() {
+  exploreSearchQuery = "";
+  exploreCategory = "all";
+  exploreCity = "all";
+  exploreNeighborhood = "all";
+  exploreSchedule = "all";
+  exploreFreeOnly = false;
+
+  const searchInput = document.getElementById("exploreSearchInput");
+  const clearBtn = document.getElementById("clearExploreSearchBtn");
+  const citySelect = document.getElementById("exploreCitySelect");
+  const neighborhoodSelect = document.getElementById("exploreNeighborhoodSelect");
+  const scheduleSelect = document.getElementById("exploreScheduleSelect");
+  const freeToggle = document.getElementById("exploreFreeOnlyToggle");
+  const pills = document.querySelectorAll("#exploreCategoryPills .cat-pill");
+
+  if (searchInput) searchInput.value = "";
+  if (clearBtn) clearBtn.style.display = "none";
+  if (citySelect) citySelect.value = "all";
+  if (neighborhoodSelect) neighborhoodSelect.value = "all";
+  if (scheduleSelect) scheduleSelect.value = "all";
+  if (freeToggle) freeToggle.checked = false;
+
+  pills.forEach(p => {
+    if (p.dataset.cat === "all") p.classList.add("active");
+    else p.classList.remove("active");
+  });
+
+  renderExploreTab(false);
+}
+window.resetExploreFilters = resetExploreFilters;
+
+function renderExploreTab(populateDropdowns = true) {
+  const grid = document.getElementById("exploreCardsGrid");
+  const countEl = document.getElementById("exploreItemCount");
+  const filterNote = document.getElementById("exploreActiveFilterNote");
+  const resetBtn = document.getElementById("clearAllExploreFiltersBtn");
+  const citySelect = document.getElementById("exploreCitySelect");
+  const neighborhoodSelect = document.getElementById("exploreNeighborhoodSelect");
+
+  if (!grid || !currentTripData) return;
+
+  const allItems = currentTripData.all_items || [];
+  const cities = currentTripData.cities || [];
+  const availDates = currentTripData.available_dates || [];
+
+  // Populate city & neighborhood dropdowns if requested
+  if (populateDropdowns) {
+    if (citySelect) {
+      let cityOptions = `<option value="all" ${exploreCity === "all" ? "selected" : ""}>🏙️ All Cities</option>`;
+      cities.forEach(c => {
+        cityOptions += `<option value="${c.id}" ${exploreCity === c.id ? "selected" : ""}>🏙️ ${escapeHtml(c.city_name)}</option>`;
+      });
+      citySelect.innerHTML = cityOptions;
+    }
+
+    if (neighborhoodSelect) {
+      const distinctNeighborhoods = Array.from(new Set(
+        allItems.map(it => it.neighborhood).filter(n => n && n.trim().length > 0)
+      )).sort();
+      let nOptions = `<option value="all" ${exploreNeighborhood === "all" ? "selected" : ""}>📍 All Neighborhoods</option>`;
+      distinctNeighborhoods.forEach(n => {
+        nOptions += `<option value="${escapeHtml(n)}" ${exploreNeighborhood.toLowerCase() === n.toLowerCase() ? "selected" : ""}>📍 ${escapeHtml(n)}</option>`;
+      });
+      neighborhoodSelect.innerHTML = nOptions;
+    }
+  }
+
+  // Filter items
+  let filtered = allItems.filter(item => {
+    // 1. Category
+    if (exploreCategory !== "all") {
+      if ((item.category || "").toLowerCase() !== exploreCategory.toLowerCase()) {
+        return false;
+      }
+    }
+
+    // 2. City
+    if (exploreCity !== "all") {
+      const matchId = item.city_segment_id === exploreCity;
+      const matchName = (item.city_name || "").toLowerCase() === exploreCity.toLowerCase();
+      if (!matchId && !matchName) return false;
+    }
+
+    // 3. Neighborhood
+    if (exploreNeighborhood !== "all") {
+      if ((item.neighborhood || "").toLowerCase() !== exploreNeighborhood.toLowerCase()) {
+        return false;
+      }
+    }
+
+    // 4. Schedule
+    if (exploreSchedule === "todo") {
+      if (item.assigned_date && item.assigned_date !== "todo") return false;
+    } else if (exploreSchedule === "scheduled") {
+      if (!item.assigned_date || item.assigned_date === "todo") return false;
+    }
+
+    // 5. Free only
+    if (exploreFreeOnly) {
+      const isFree = item.is_free || (item.cost && item.cost.toLowerCase().includes("free"));
+      if (!isFree) return false;
+    }
+
+    // 6. Search Query
+    if (exploreSearchQuery) {
+      const q = exploreSearchQuery.toLowerCase();
+      const text = [
+        item.title || "",
+        item.description || "",
+        item.neighborhood || "",
+        item.city_name || "",
+        item.highlight || "",
+        item.cost || "",
+        item.source_platform || "",
+        item.category || ""
+      ].join(" ").toLowerCase();
+      if (!text.includes(q)) return false;
+    }
+
+    return true;
+  });
+
+  if (countEl) countEl.textContent = filtered.length;
+
+  // Active filter indicator
+  const hasActiveFilters = Boolean(
+    exploreCategory !== "all" ||
+    exploreCity !== "all" ||
+    exploreNeighborhood !== "all" ||
+    exploreSchedule !== "all" ||
+    exploreFreeOnly ||
+    exploreSearchQuery
+  );
+
+  if (resetBtn) resetBtn.style.display = hasActiveFilters ? "inline-block" : "none";
+  if (filterNote) {
+    if (hasActiveFilters) {
+      const activeDesc = [];
+      if (exploreCategory !== "all") activeDesc.push(`Category: ${exploreCategory}`);
+      if (exploreCity !== "all") {
+        const foundCity = cities.find(c => c.id === exploreCity);
+        activeDesc.push(`City: ${foundCity ? foundCity.city_name : exploreCity}`);
+      }
+      if (exploreNeighborhood !== "all") activeDesc.push(`Neighborhood: ${exploreNeighborhood}`);
+      if (exploreSchedule === "todo") activeDesc.push("Bucket List Only");
+      if (exploreSchedule === "scheduled") activeDesc.push("Scheduled Only");
+      if (exploreFreeOnly) activeDesc.push("Free Only");
+      if (exploreSearchQuery) activeDesc.push(`"${exploreSearchQuery}"`);
+
+      filterNote.textContent = `(Filters: ${activeDesc.join(", ")})`;
+      filterNote.style.display = "inline";
+    } else {
+      filterNote.style.display = "none";
+    }
+  }
+
+  // Render cards or empty state
+  if (filtered.length === 0) {
+    grid.innerHTML = `
+      <div style="grid-column: 1/-1; text-align: center; padding: 3.5rem 1.5rem; color: var(--text-muted); background: var(--bg-card); border-radius: var(--radius-md); border: 1px dashed var(--border);">
+        <div style="font-size: 2.2rem; margin-bottom: 0.6rem;">🔍</div>
+        <h3 style="color: var(--text-main); font-size: 1.15rem; margin-bottom: 0.4rem;">No matching discoveries found</h3>
+        <p style="font-size: 0.88rem; max-width: 480px; margin: 0 auto 1.2rem auto;">
+          Try adjusting or clearing your filters, or scout live events & attractions in the <strong>🌐 City Event Scout</strong> tab.
+        </p>
+        <button class="btn btn-secondary" onclick="resetExploreFilters()">✕ Clear All Filters</button>
+      </div>
+    `;
+    return;
+  }
+
+  grid.innerHTML = filtered.map(item => renderExploreCard(item, availDates)).join("");
+  attachExploreCardEvents();
+}
+
+function renderExploreCard(item, availableDates) {
+  const author = item.added_by || { name: "Traveler", avatar_color: "#38bdf8" };
+  const transit = item.transit || {};
+  const categories = (currentTripData && currentTripData.categories) || {};
+  const catConfig = categories[item.category] || {
+    icon: "✨",
+    label: item.category ? (item.category.charAt(0).toUpperCase() + item.category.slice(1)) : "General"
+  };
+
+  const hasDirectUrl = Boolean(item.url && item.url.trim() !== "");
+  const targetUrl = hasDirectUrl
+    ? item.url
+    : `https://www.google.com/search?q=${encodeURIComponent(item.title + ' ' + (item.city_name || ''))}`;
+
+  let mapsUrl = "";
+  if (item.lat && item.lon) {
+    mapsUrl = `https://www.google.com/maps/search/?api=1&query=${item.lat},${item.lon}`;
+  } else {
+    mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.title + ' ' + (item.address || item.city_name || ''))}`;
+  }
+
+  const isFree = Boolean(item.is_free || (item.cost && item.cost.toLowerCase().includes("free")));
+  const costBadge = isFree
+    ? `<span class="badge badge-curated badge-clickable" data-filter-type="free" title="Click to filter Free Only">🎟️ FREE</span>`
+    : `<span class="badge badge-cost" title="Cost: ${escapeHtml(item.cost || 'Paid')}">💰 ${escapeHtml(item.cost || 'Paid')}</span>`;
+
+  const isScheduled = Boolean(item.assigned_date && item.assigned_date !== "todo");
+  const scheduleBadge = isScheduled
+    ? `<span class="badge badge-scheduled badge-clickable" data-filter-type="schedule" data-filter-value="scheduled" title="Click to filter Scheduled items">📅 Day: ${escapeHtml(item.assigned_date)}</span>`
+    : `<span class="badge badge-todo badge-clickable" data-filter-type="schedule" data-filter-value="todo" title="Click to filter Bucket List items">📋 In Bucket List</span>`;
+
+  const catBadge = `<span class="badge badge-clickable" data-filter-type="cat" data-filter-value="${escapeHtml(item.category || '')}" style="background:rgba(56,189,248,0.12); color:#38bdf8; border:1px solid rgba(56,189,248,0.28);" title="Click to filter by ${escapeHtml(catConfig.label)}">${catConfig.icon} ${escapeHtml(catConfig.label)}</span>`;
+
+  const cityBadge = item.city_name
+    ? `<span class="badge badge-city badge-clickable" data-filter-type="city" data-filter-value="${escapeHtml(item.city_segment_id || item.city_name)}" title="Click to filter by ${escapeHtml(item.city_name)}">🏙️ ${escapeHtml(item.city_name)}</span>`
+    : '';
+
+  const neighborhoodBadge = item.neighborhood
+    ? `<span class="badge badge-clickable" data-filter-type="neighborhood" data-filter-value="${escapeHtml(item.neighborhood)}" style="background:rgba(168,85,247,0.12); color:#c084fc; border:1px solid rgba(168,85,247,0.28);" title="Click to filter by neighborhood ${escapeHtml(item.neighborhood)}">📍 ${escapeHtml(item.neighborhood)}</span>`
+    : '';
+
+  const sourceBadge = item.source_platform
+    ? `<span class="badge badge-web" title="Scout Source">🌐 ${escapeHtml(item.source_platform)}</span>`
+    : `<span class="badge badge-curated" title="Curated Essential">🏛️ Curated</span>`;
+
+  const transitBadge = (transit && transit.miles)
+    ? `<span class="badge badge-transit" title="Transit distance from ${escapeHtml(transit.stay_name || 'Stay')}">🚶 ${transit.miles} mi (${escapeHtml(transit.walk_time || '')})</span>`
+    : '';
+
+  const sourceLabel = item.source_platform ? escapeHtml(item.source_platform) : "Website";
+
+  return `
+    <div class="card" id="explore-card-${item.id}" data-item-id="${item.id}">
+      <div>
+        <!-- Card Top & Clickable Filter Badges -->
+        <div class="card-top">
+          <div class="card-badges">
+            ${catBadge}
+            ${cityBadge}
+            ${neighborhoodBadge}
+            ${costBadge}
+            ${scheduleBadge}
+            ${transitBadge}
+            ${sourceBadge}
+          </div>
+        </div>
+
+        <h3 class="card-title" style="margin-top:0.6rem; font-size:1.05rem; line-height:1.35;">
+          <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--text-main); text-decoration:none;" onmouseover="this.style.color='#38bdf8'" onmouseout="this.style.color='var(--text-main)'">
+            ${escapeHtml(item.title)} ↗
+          </a>
+        </h3>
+
+        <div class="card-meta" style="font-size:0.8rem; color:var(--text-muted); margin:0.35rem 0 0.65rem 0;">
+          <span>📍 ${escapeHtml(item.neighborhood || item.city_name || 'Location')}</span>
+          ${item.time_info ? ` &bull; <span style="color:var(--text-dim);">${escapeHtml(item.time_info)}</span>` : ''}
+        </div>
+
+        ${transit.miles ? `
+          <div style="background:rgba(56,189,248,0.06); border-left:3px solid #38bdf8; padding:0.4rem 0.65rem; border-radius:0 6px 6px 0; font-size:0.78rem; color:#bae6fd; margin-bottom:0.75rem;">
+            <strong>🚶 Transit from ${escapeHtml(transit.stay_name || 'Stay')}:</strong> ${transit.miles} mi (${escapeHtml(transit.walk_time || '')}) &bull; ${escapeHtml(transit.best_mode || transit.summary || '')}
+          </div>
+        ` : ''}
+
+        ${item.description ? `
+          <p class="card-desc" style="font-size:0.84rem; color:#cbd5e1; line-height:1.45; margin-bottom:0.65rem;">
+            ${escapeHtml(item.description)}
+          </p>
+        ` : ''}
+
+        ${item.highlight ? `
+          <div style="background:rgba(251,191,36,0.08); border-left:3px solid #fbbf24; padding:0.4rem 0.65rem; border-radius:0 6px 6px 0; font-size:0.79rem; color:#fef08a; margin-bottom:0.75rem;">
+            <strong>Key Highlight:</strong> ${escapeHtml(item.highlight)}
+          </div>
+        ` : ''}
+
+        <!-- Personal Note Section -->
+        <div class="card-note-box" id="explore-note-box-${item.id}" style="margin-top:0.4rem;">
+          ${item.personal_note ? `
+            <div class="note-content-display">
+              <div class="note-meta-line">
+                <span class="note-author">📝 Note by <strong>${escapeHtml(item.note_author?.name || 'Traveler')}</strong> <span style="font-size:0.7rem; color:#94a3b8;">(${escapeHtml(item.note_author?.email || '')})</span>:</span>
+                <span class="note-date">${escapeHtml(item.note_date || '')}</span>
+              </div>
+              <div class="note-text">&ldquo;${escapeHtml(item.personal_note)}&rdquo;</div>
+              <div style="margin-top:0.35rem; display:flex; gap:0.6rem; align-items:center;">
+                <button type="button" class="btn-note-edit" onclick='editCardNote("${item.id}", ${JSON.stringify(item.personal_note).replace(/'/g, "&apos;")})'>✏️ Edit Note</button>
+                <button type="button" class="btn-note-delete" onclick="deleteCardNote('${item.id}')">🗑️ Remove</button>
+              </div>
+            </div>
+          ` : `
+            <button type="button" class="btn-add-note" onclick="openAddNotePrompt('${item.id}')">
+              📝 + Add Personal Note
+            </button>
+          `}
+        </div>
+      </div>
+
+      <!-- Card Footer -->
+      <div class="card-footer" style="margin-top:1rem; padding-top:0.75rem; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.6rem;">
+        <div style="display:flex; align-items:center; gap:0.75rem;">
+          <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" style="color:#38bdf8; font-size:0.8rem; text-decoration:none; font-weight:500;">
+            📍 Maps
+          </a>
+          ${hasDirectUrl ? `
+            <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" style="color:#a78bfa; font-size:0.8rem; text-decoration:none; font-weight:500;">
+              🌐 ${sourceLabel} &rarr;
+            </a>
+          ` : `
+            <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" style="color:#94a3b8; font-size:0.8rem; text-decoration:none;">
+              🔍 Info &rarr;
+            </a>
+          `}
+        </div>
+
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <div class="card-author-tag" title="Added by ${escapeHtml(author.name)}" style="display:flex; align-items:center; gap:0.3rem; font-size:0.74rem; color:var(--text-muted);">
+            <span class="author-dot" style="background:${author.avatar_color || '#38bdf8'}; width:18px; height:18px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; color:#fff; font-size:0.65rem; font-weight:700;">
+              ${author.name.slice(0, 2).toUpperCase()}
+            </span>
+            <span>${escapeHtml(author.name.split(" ")[0])}</span>
+          </div>
+
+          <select class="card-date-select" data-item-id="${item.id}" style="background:var(--bg-main); border:1px solid var(--border); color:var(--text-main); padding:0.25rem 0.5rem; border-radius:var(--radius-sm); font-size:0.78rem;">
+            <option value="todo" ${item.assigned_date === 'todo' || !item.assigned_date ? 'selected' : ''}>📋 Bucket List</option>
+            ${availableDates.map(d => `
+              <option value="${d}" ${item.assigned_date === d ? 'selected' : ''}>📅 ${d}</option>
+            `).join("")}
+          </select>
+
+          <button onclick="deleteItem('${item.id}')" style="background:none; border:none; color:#f43f5e; cursor:pointer; font-size:1.1rem; padding:0 0.25rem; line-height:1;" title="Delete discovery">&times;</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function attachExploreCardEvents() {
+  const grid = document.getElementById("exploreCardsGrid");
+  if (!grid) return;
+
+  // 1. Clickable Tag Badges delegation
+  grid.querySelectorAll(".badge-clickable").forEach(badge => {
+    badge.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const filterType = badge.dataset.filterType;
+      const filterVal = badge.dataset.filterValue;
+
+      if (filterType === "cat") {
+        exploreCategory = filterVal;
+        const pills = document.querySelectorAll("#exploreCategoryPills .cat-pill");
+        pills.forEach(p => {
+          if (p.dataset.cat === filterVal) p.classList.add("active");
+          else p.classList.remove("active");
+        });
+      } else if (filterType === "city") {
+        exploreCity = filterVal;
+        const citySelect = document.getElementById("exploreCitySelect");
+        if (citySelect) citySelect.value = filterVal;
+      } else if (filterType === "neighborhood") {
+        exploreNeighborhood = filterVal;
+        const neighborhoodSelect = document.getElementById("exploreNeighborhoodSelect");
+        if (neighborhoodSelect) neighborhoodSelect.value = filterVal;
+      } else if (filterType === "free") {
+        exploreFreeOnly = true;
+        const freeToggle = document.getElementById("exploreFreeOnlyToggle");
+        if (freeToggle) freeToggle.checked = true;
+      } else if (filterType === "schedule") {
+        exploreSchedule = filterVal;
+        const scheduleSelect = document.getElementById("exploreScheduleSelect");
+        if (scheduleSelect) scheduleSelect.value = filterVal;
+      }
+
+      renderExploreTab(false);
+    });
+  });
+
+  // 2. Card date dropdown change handler
+  grid.querySelectorAll(".card-date-select").forEach(sel => {
+    sel.addEventListener("change", async (e) => {
+      const itemId = e.target.dataset.itemId;
+      const newDate = e.target.value;
+      try {
+        await fetch(`/api/trips/${currentTripId}/items/${itemId}`, {
+          method: "PUT",
+          headers: getAuthHeaders({ "Content-Type": "application/json" }),
+          credentials: "include",
+          body: JSON.stringify({ assigned_date: newDate })
+        });
+        await refreshTrip();
+      } catch (err) {
+        alert("Failed to assign date: " + err.message);
+      }
+    });
+  });
 }
 
 // 8. Modals Management
