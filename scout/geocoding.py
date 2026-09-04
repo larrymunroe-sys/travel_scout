@@ -3,10 +3,11 @@
 Provides instant offline coordinate lookup for 70+ global destinations, with
 graceful live fallback to OpenStreetMap's free Nominatim Geocoding API (no API key required).
 """
+import json
 import re
 import urllib.parse
+import urllib.request
 from typing import Tuple, Dict, Any, Optional
-import requests
 
 # Extensive offline city registry covering major global destinations
 GLOBAL_CITY_COORDINATES: Dict[str, Dict[str, Any]] = {
@@ -129,24 +130,25 @@ def resolve_city_coordinates(city_name: str, country: Optional[str] = None) -> T
     try:
         query = f"{city_name}, {country}" if country else city_name
         url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(query)}&format=json&limit=1"
-        resp = requests.get(
+        req = urllib.request.Request(
             url,
-            headers={"User-Agent": "TravelScoutApp/2.0 (collaborative-travel-planner)"},
-            timeout=3.0
+            headers={"User-Agent": "TravelScoutApp/2.0 (collaborative-travel-planner)"}
         )
-        if resp.status_code == 200:
-            data = resp.json()
-            if data and len(data) > 0:
-                lat = float(data[0]["lat"])
-                lon = float(data[0]["lon"])
-                resolved_country = country or ""
-                # Cache for future calls
-                GLOBAL_CITY_COORDINATES[key] = {
-                    "lat": lat,
-                    "lon": lon,
-                    "country": resolved_country
-                }
-                return (lat, lon, resolved_country)
+        with urllib.request.urlopen(req, timeout=3.0) as resp:
+            if resp.status == 200:
+                raw_bytes = resp.read()
+                data = json.loads(raw_bytes.decode("utf-8"))
+                if data and len(data) > 0:
+                    lat = float(data[0]["lat"])
+                    lon = float(data[0]["lon"])
+                    resolved_country = country or ""
+                    # Cache for future calls
+                    GLOBAL_CITY_COORDINATES[key] = {
+                        "lat": lat,
+                        "lon": lon,
+                        "country": resolved_country
+                    }
+                    return (lat, lon, resolved_country)
     except Exception as err:
         print(f"Notice: Nominatim geocoding lookup for '{city_name}' skipped: {err}")
 
