@@ -630,6 +630,28 @@ async def update_trip(trip_id: str, payload: UpdateTripPayload, request: Request
     db.commit()
     return {"status": "updated", "trip_id": trip.id, "title": trip.title}
 
+@app.delete("/api/trips/{trip_id}")
+async def delete_trip(trip_id: str, request: Request, db: Session = Depends(get_db)):
+    """Permanently delete an entire trip, cascading all stops, stays, and cities."""
+    user = get_current_user(request, db)
+    trip = check_trip_access(trip_id, user, db, require_edit=True)
+
+    if trip.owner_id != user.id:
+        raise HTTPException(status_code=403, detail="Only the trip owner can permanently delete this itinerary.")
+
+    # SQLAlchemy cascade="all, delete-orphan" cleans up city_segments, stays, items, and collaborators
+    db.delete(trip)
+    db.commit()
+
+    # Find remaining accessible trips for this user (or auto-provision if none)
+    remaining = get_user_accessible_trips(user, db)
+
+    return {
+        "status": "deleted",
+        "deleted_trip_id": trip_id,
+        "next_trip_id": remaining[0].id if remaining else None
+    }
+
 @app.get("/api/trips/{trip_id}")
 async def get_trip_details(trip_id: str, request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)

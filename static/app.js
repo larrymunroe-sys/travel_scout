@@ -1619,6 +1619,40 @@ function initModals() {
     });
   }
 
+  const deleteTripBtn = document.getElementById("deleteTripBtn");
+  if (deleteTripBtn) {
+    deleteTripBtn.addEventListener("click", async () => {
+      if (!currentTripId || !currentTripData || !currentTripData.trip) return;
+      const tripTitle = currentTripData.trip.title || "this itinerary";
+      if (!confirm(`⚠️ Are you sure you want to permanently delete "${tripTitle}"?\n\nThis will remove all cities, accommodations, notes, and scheduled stops in this trip. This action cannot be undone.`)) {
+        return;
+      }
+      try {
+        const res = await fetch(`/api/trips/${currentTripId}`, {
+          method: "DELETE",
+          headers: getAuthHeaders(),
+          credentials: "include"
+        });
+        if (res.ok) {
+          const data = await res.json();
+          editTripModal.style.display = "none";
+          alert(`"${tripTitle}" has been permanently deleted.`);
+          if (data.next_trip_id) {
+            currentTripId = data.next_trip_id;
+          } else {
+            currentTripId = null;
+          }
+          await loadInitialTrip();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          alert("Failed to delete trip: " + (err.detail || res.statusText));
+        }
+      } catch (err) {
+        alert("Error deleting trip: " + err.message);
+      }
+    });
+  }
+
   // Create Trip Modal
   const createTripModal = document.getElementById("createTripModal");
   const openCreateTripBtn = document.getElementById("openCreateTripBtn");
