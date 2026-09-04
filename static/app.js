@@ -658,6 +658,264 @@ function initModals() {
   if (openHelpBtn) openHelpBtn.addEventListener("click", () => helpModal.style.display = "flex");
   if (closeHelpModalBtn) closeHelpModalBtn.addEventListener("click", () => helpModal.style.display = "none");
   if (closeHelpModalBtn2) closeHelpModalBtn2.addEventListener("click", () => helpModal.style.display = "none");
+
+  // Print & Export Modal
+  const printModal = document.getElementById("printModal");
+  const openPrintModalBtn = document.getElementById("openPrintModalBtn");
+  const openPrintHeaderBtn = document.getElementById("openPrintHeaderBtn");
+  const closePrintModalBtn = document.getElementById("closePrintModalBtn");
+  const closePrintModalBtn2 = document.getElementById("closePrintModalBtn2");
+
+  const printDateModeSelect = document.getElementById("printDateModeSelect");
+  const printSingleDateGroup = document.getElementById("printSingleDateGroup");
+  const printSingleDateSelect = document.getElementById("printSingleDateSelect");
+  const printRangeDateGroup = document.getElementById("printRangeDateGroup");
+  const printRangeStart = document.getElementById("printRangeStart");
+  const printRangeEnd = document.getElementById("printRangeEnd");
+  const printIncludeTodoCheck = document.getElementById("printIncludeTodoCheck");
+  const printFormattedTextarea = document.getElementById("printFormattedTextarea");
+
+  function openPrintModal() {
+    if (!currentTripData) return;
+    const avail = currentTripData.available_dates || [];
+    if (printSingleDateSelect) {
+      printSingleDateSelect.innerHTML = avail.map(d => `<option value="${d}">📅 ${d}</option>`).join("");
+    }
+    if (avail.length > 0) {
+      if (printRangeStart) printRangeStart.value = avail[0];
+      if (printRangeEnd) printRangeEnd.value = avail[avail.length - 1];
+    }
+    updatePrintPreview();
+    if (printModal) printModal.style.display = "flex";
+  }
+
+  if (openPrintModalBtn) openPrintModalBtn.addEventListener("click", openPrintModal);
+  if (openPrintHeaderBtn) openPrintHeaderBtn.addEventListener("click", openPrintModal);
+  if (closePrintModalBtn) closePrintModalBtn.addEventListener("click", () => printModal.style.display = "none");
+  if (closePrintModalBtn2) closePrintModalBtn2.addEventListener("click", () => printModal.style.display = "none");
+
+  if (printDateModeSelect) {
+    printDateModeSelect.addEventListener("change", () => {
+      const val = printDateModeSelect.value;
+      if (val === "single") {
+        if (printSingleDateGroup) printSingleDateGroup.style.display = "block";
+        if (printRangeDateGroup) printRangeDateGroup.style.display = "none";
+      } else if (val === "range") {
+        if (printSingleDateGroup) printSingleDateGroup.style.display = "none";
+        if (printRangeDateGroup) printRangeDateGroup.style.display = "grid";
+      } else {
+        if (printSingleDateGroup) printSingleDateGroup.style.display = "none";
+        if (printRangeDateGroup) printRangeDateGroup.style.display = "none";
+      }
+      updatePrintPreview();
+    });
+  }
+
+  [printSingleDateSelect, printRangeStart, printRangeEnd, printIncludeTodoCheck].forEach(el => {
+    if (el) el.addEventListener("change", updatePrintPreview);
+  });
+
+  function getPrintQueryParams(autoprint = false) {
+    const mode = printDateModeSelect ? printDateModeSelect.value : "all";
+    const includeTodo = printIncludeTodoCheck ? printIncludeTodoCheck.checked : true;
+    const params = new URLSearchParams();
+    if (mode === "single" && printSingleDateSelect) {
+      params.set("date", printSingleDateSelect.value);
+    } else if (mode === "range" && printRangeStart && printRangeEnd) {
+      params.set("start_date", printRangeStart.value);
+      params.set("end_date", printRangeEnd.value);
+    } else {
+      params.set("date", "all");
+    }
+    params.set("include_todo", includeTodo ? "1" : "0");
+    if (autoprint) params.set("autoprint", "1");
+    return params.toString();
+  }
+
+  // Action: Print / PDF
+  const triggerPrintPdfBtn = document.getElementById("triggerPrintPdfBtn");
+  if (triggerPrintPdfBtn) {
+    triggerPrintPdfBtn.addEventListener("click", () => {
+      if (!currentTripId) return;
+      const url = `/api/trips/${currentTripId}/print?${getPrintQueryParams(true)}`;
+      window.open(url, "_blank");
+    });
+  }
+
+  // Action: Open in new tab
+  const triggerOpenPrintTabBtn = document.getElementById("triggerOpenPrintTabBtn");
+  if (triggerOpenPrintTabBtn) {
+    triggerOpenPrintTabBtn.addEventListener("click", () => {
+      if (!currentTripId) return;
+      const url = `/api/trips/${currentTripId}/print?${getPrintQueryParams(false)}`;
+      window.open(url, "_blank");
+    });
+  }
+
+  // Action: Email Share
+  const triggerEmailShareBtn = document.getElementById("triggerEmailShareBtn");
+  if (triggerEmailShareBtn) {
+    triggerEmailShareBtn.addEventListener("click", () => {
+      const emailContent = generateFormattedItineraryText("email");
+      const subject = `Travel Scout Itinerary: ${currentTripData.trip.title}`;
+      window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailContent)}`;
+    });
+  }
+
+  // Action: SMS Share
+  const triggerSmsShareBtn = document.getElementById("triggerSmsShareBtn");
+  if (triggerSmsShareBtn) {
+    triggerSmsShareBtn.addEventListener("click", () => {
+      const smsContent = generateFormattedItineraryText("sms");
+      window.location.href = `sms:?body=${encodeURIComponent(smsContent)}`;
+    });
+  }
+
+  // Clipboard copies
+  const copyEmailTextBtn = document.getElementById("copyEmailTextBtn");
+  if (copyEmailTextBtn) {
+    copyEmailTextBtn.addEventListener("click", async () => {
+      const text = generateFormattedItineraryText("email");
+      await navigator.clipboard.writeText(text);
+      copyEmailTextBtn.textContent = "✓ Copied Email Text!";
+      setTimeout(() => copyEmailTextBtn.textContent = "📋 Copy Email Text", 2000);
+    });
+  }
+
+  const copySmsTextBtn = document.getElementById("copySmsTextBtn");
+  if (copySmsTextBtn) {
+    copySmsTextBtn.addEventListener("click", async () => {
+      const text = generateFormattedItineraryText("sms");
+      await navigator.clipboard.writeText(text);
+      copySmsTextBtn.textContent = "✓ Copied SMS Text!";
+      setTimeout(() => copySmsTextBtn.textContent = "📋 Copy SMS Text", 2000);
+    });
+  }
+
+  function updatePrintPreview() {
+    if (!printFormattedTextarea) return;
+    printFormattedTextarea.value = generateFormattedItineraryText("email");
+  }
+}
+
+function generateFormattedItineraryText(mode = "email") {
+  if (!currentTripData || !currentTripData.trip) return "";
+
+  const trip = currentTripData.trip;
+  const cities = currentTripData.cities || [];
+  const exportMode = document.getElementById("printDateModeSelect")?.value || "all";
+  const singleDate = document.getElementById("printSingleDateSelect")?.value;
+  const rangeStart = document.getElementById("printRangeStart")?.value;
+  const rangeEnd = document.getElementById("printRangeEnd")?.value;
+  const includeTodo = document.getElementById("printIncludeTodoCheck")?.checked ?? true;
+
+  // Filter days
+  let filteredDays = currentTripData.itinerary?.days || [];
+  if (exportMode === "single" && singleDate) {
+    filteredDays = filteredDays.filter(d => d.date === singleDate);
+  } else if (exportMode === "range" && rangeStart && rangeEnd) {
+    filteredDays = filteredDays.filter(d => d.date >= rangeStart && d.date <= rangeEnd);
+  }
+
+  let lines = [];
+
+  if (mode === "sms") {
+    lines.push(`🌍 ${trip.title.toUpperCase()}`);
+    if (exportMode === "single") lines.push(`📅 Date: ${singleDate}`);
+    else lines.push(`📅 Dates: ${currentTripData.available_dates?.[0] || ''} to ${currentTripData.available_dates?.slice(-1)[0] || ''}`);
+    lines.push("");
+
+    filteredDays.forEach(day => {
+      lines.push(`▶ DAY: ${day.date} (${day.items.length} stops)`);
+      day.items.forEach((it, idx) => {
+        const tr = it.transit ? ` [${it.transit.miles || ''}mi • ${it.transit.walk_time || ''}]` : '';
+        lines.push(`${idx + 1}. ${it.title}${tr} - ${it.cost || 'Free'}`);
+        if (it.highlight) lines.push(`   "${it.highlight}"`);
+        if (it.transit?.best_mode) lines.push(`   Transit: ${it.transit.best_mode}`);
+      });
+      lines.push("");
+    });
+
+    if (includeTodo && currentTripData.itinerary?.todo?.length > 0) {
+      lines.push(`📋 TO-DO WISHLIST:`);
+      currentTripData.itinerary.todo.slice(0, 5).forEach((it, i) => {
+        lines.push(`• ${it.title} (${it.city_name || ''})`);
+      });
+    }
+
+    lines.push(`\nShared via Travel Scout: http://127.0.0.1:8000`);
+    return lines.join("\n");
+  }
+
+  // Full Rich Email format
+  lines.push(`=======================================================`);
+  lines.push(`🌍 TRAVEL SCOUT ITINERARY: ${trip.title.toUpperCase()}`);
+  if (trip.description) lines.push(`📝 Purpose: ${trip.description}`);
+  lines.push(`📅 Dates: ${currentTripData.available_dates?.[0] || ''} to ${currentTripData.available_dates?.slice(-1)[0] || ''}`);
+  lines.push(`🏙️ Cities: ${cities.map(c => c.city_name).join(" -> ")}`);
+  lines.push(`👥 Team: ${currentTripData.collaborators?.map(c => c.name).join(", ") || 'Travelers'}`);
+  lines.push(`=======================================================\n`);
+
+  // Accommodations
+  lines.push(`🏨 ACCOMMODATIONS REFERENCE:`);
+  cities.forEach(c => {
+    c.stays.forEach(s => {
+      lines.push(`• ${s.name} (${c.city_name})`);
+      lines.push(`  Address: ${s.address}`);
+      lines.push(`  Check-in: ${s.start_date} | Check-out: ${s.end_date}`);
+      if (s.notes) lines.push(`  Notes: ${s.notes}`);
+    });
+  });
+  lines.push("");
+
+  // Days
+  filteredDays.forEach((day, dIdx) => {
+    lines.push(`-------------------------------------------------------`);
+    lines.push(`📅 DAY ${dIdx + 1}: ${day.date}`);
+    lines.push(`-------------------------------------------------------`);
+
+    if (day.items.length === 0) {
+      lines.push(`(No stops scheduled for this day yet)\n`);
+      return;
+    }
+
+    day.items.forEach((it, iIdx) => {
+      lines.push(`\n[Stop ${iIdx + 1}] ${it.title.toUpperCase()}`);
+      lines.push(`• Category: ${it.category} | Cost: ${it.cost || 'Free'} | Neighborhood: ${it.neighborhood || it.city_name}`);
+      lines.push(`• Address: ${it.address || 'City Center'}`);
+
+      if (it.transit) {
+        lines.push(`• Distance: ${it.transit.miles || '?'} mi from ${it.transit.stay_name || 'hotel'} (${it.transit.walk_time || ''})`);
+        if (it.transit.best_mode) lines.push(`• Recommended Transit: ${it.transit.best_mode}`);
+        if (it.transit.summary) lines.push(`• Transit Tip: ${it.transit.summary}`);
+      }
+
+      if (it.highlight) lines.push(`• Highlight: "${it.highlight}"`);
+      if (it.description) lines.push(`• Overview: ${it.description}`);
+      if (it.time_info) lines.push(`• Hours: ${it.time_info}`);
+      if (it.url) lines.push(`• Web: ${it.url}`);
+      lines.push(`• Maps: https://www.google.com/maps/search/?api=1&query=${it.lat},${it.lon}`);
+      lines.push(`• Added by: ${it.added_by?.name || 'Traveler'}`);
+    });
+    lines.push("");
+  });
+
+  // To-Do Wishlist
+  if (includeTodo && currentTripData.itinerary?.todo?.length > 0) {
+    lines.push(`=======================================================`);
+    lines.push(`📋 UNSCHEDULED BUCKET LIST & WISHLIST:`);
+    lines.push(`=======================================================`);
+    currentTripData.itinerary.todo.forEach((it, idx) => {
+      lines.push(`\n${idx + 1}. ${it.title} (${it.city_name || ''}) - ${it.cost || 'Free'}`);
+      if (it.address) lines.push(`   Address: ${it.address}`);
+      if (it.highlight) lines.push(`   "${it.highlight}"`);
+      if (it.url) lines.push(`   Link: ${it.url}`);
+    });
+    lines.push("");
+  }
+
+  lines.push(`\nGenerated with Travel Scout (http://127.0.0.1:8000)`);
+  return lines.join("\n");
 }
 
 function openAddStayModal(cityId, cityName) {

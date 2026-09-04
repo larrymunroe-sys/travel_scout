@@ -17,7 +17,8 @@ This comprehensive guide covers every feature of the platform, from your first l
 7. [Live Autonomous Cultural Scout & Discovery](#7-live-autonomous-cultural-scout--discovery)
 8. [Interactive Multi-City Route Map](#8-interactive-multi-city-route-map)
 9. [Sharing & Multi-User Collaboration](#9-sharing--multi-user-collaboration)
-10. [Frequently Asked Questions (FAQ)](#10-frequently-asked-questions-faq)
+10. [Printing, PDF Export & Email/SMS Sharing](#10-printing-pdf-export--emailsms-sharing)
+11. [Frequently Asked Questions (FAQ)](#11-frequently-asked-questions-faq)
 
 ---
 
@@ -252,7 +253,51 @@ Click the **`🗺️ Interactive Map`** tab for a visual overview of your journe
 
 ---
 
-## 10. Frequently Asked Questions (FAQ)
+## 10. Printing, PDF Export & Email/SMS Sharing
+
+Travel Scout includes a unified printing and multi-channel sharing suite so you can distribute your schedule to traveling companions, print offline paper copies, or send daily summaries via SMS.
+
+### Opening the Print & Export Dialog
+You can open the dialog anytime from two places:
+1. **Header Toolbar:** Click the **`🖨️ Print / Export`** button in the top navigation bar.
+2. **Itinerary Tab:** Click the **`🖨️ Print & Export`** button on the Itinerary toolbar above the schedule.
+
+### Selecting Dates to Output
+The export engine lets you customize the exact scope of your output:
+- **🌐 All Dates (Complete Journey):** Exports the full multi-city trip from start to finish.
+- **📅 Single Date:** Choose any specific date (e.g. `2027-05-10`) to output only that day's scheduled stops and active hotel base.
+- **📆 Custom Date Range:** Specify a start and end date (e.g. `2027-05-10` to `2027-05-13`) to export a multi-day leg or weekend getaway.
+- **Unscheduled Bucket List Checkbox:** Toggle whether to append your unassigned wishlist items at the end.
+
+### Output Actions & Formats
+
+#### 1. 🖨️ Print / Save as PDF
+- Generates a dedicated, high-contrast, ink-friendly HTML view rendered with clean borders, clear page-break rules (`page-break-inside: avoid;`), and zero dark-theme background ink consumption.
+- Automatically invokes your browser's native print dialog. Select **"Save as PDF"** to create a PDF travel document for offline use on phones or tablets.
+- **Key Information Included on Every Card:**
+  - **Venue/Event Title:** Direct clickable link to official homepage or Google overview.
+  - **Transit & Distance Box:** Exact distance in miles from the date's active hotel base, estimated walking time, recommended transit mode (e.g. *Lisbon Metro / Tram*, *Scenic Walk*, *Metro do Porto*), and route instructions.
+  - **Curated Highlight:** Notable quotes, specialty dishes, or architectural distinctions.
+  - **Full Description:** Comprehensive overview of what makes the venue worth visiting.
+  - **Location & Category:** Neighborhood, full street address, and cost tier.
+  - **Team Attribution & Maps:** Contributor avatar attribution and direct Google Maps navigation links.
+
+#### 2. 📄 Open Print View (New Tab)
+- Opens the printable page in a clean new browser tab for previewing or saving without triggering the immediate print popup.
+
+#### 3. ✉️ Send by Email (`mailto:`)
+- Formats a comprehensive, human-readable itinerary email with complete stops, hotel check-ins, addresses, transit directions, highlights, and Google Maps links.
+- Clicking **"Send by Email"** opens your native email client (Outlook, Apple Mail, Gmail) with the trip title and subject pre-filled.
+- Use **"📋 Copy Email Text"** to copy the formatted text directly to your clipboard for pasting into webmail or Slack.
+
+#### 4. 💬 Send by Text / SMS (`sms:`)
+- Formats a compact, mobile-friendly message using bullet points and emojis designed specifically for smartphone screens.
+- Clicking **"Send by Text / SMS"** opens your phone or desktop messaging app (iOS Messages, Android Messages) with the body pre-loaded.
+- Use **"📋 Copy SMS Text"** to copy the compact message for WhatsApp, iMessage, Signal, or Telegram.
+
+---
+
+## 11. Frequently Asked Questions (FAQ)
 
 #### Q: How do transit calculations work if I change hotels?
 **A:** Travel Scout compares the date assigned to an itinerary item against the check-in and check-out dates of all hotels in that city. If you move from Hotel A to Hotel B on May 12, an event scheduled on May 13 will automatically calculate distance and walking time from Hotel B.

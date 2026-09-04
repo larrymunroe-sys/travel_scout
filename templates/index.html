@@ -34,6 +34,10 @@
           <!-- Injected via JavaScript -->
         </div>
 
+        <button id="openPrintHeaderBtn" class="btn btn-secondary btn-sm" title="Print itinerary, save PDF, or send by email/text">
+          🖨️ Print / Export
+        </button>
+
         <button id="openHelpBtn" class="btn btn-secondary btn-sm" title="Open Help & How-To Manual">
           ❓ Help Guide
         </button>
@@ -103,6 +107,9 @@
           <select id="itineraryCityFilter">
             <option value="all">🌐 All Cities (Unified View)</option>
           </select>
+          <button id="openPrintModalBtn" class="btn btn-secondary" title="Print itinerary, save PDF, or send by email/text">
+            🖨️ Print &amp; Export
+          </button>
           <button id="openAddItemBtn" class="btn btn-primary">
             ➕ Add Custom Item
           </button>
@@ -473,6 +480,104 @@
       </div>
       <div class="modal-actions" style="margin-top:1rem;">
         <button type="button" class="btn btn-primary" id="closeHelpModalBtn2">Got It!</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 7: PRINT & EXPORT ITINERARY -->
+  <div class="modal-overlay" id="printModal" style="display:none;">
+    <div class="modal-card" style="max-width:780px; max-height:88vh; overflow-y:auto;">
+      <div class="modal-header">
+        <h3>🖨️ Print, Export &amp; Share Itinerary</h3>
+        <button class="modal-close" id="closePrintModalBtn">&times;</button>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:1.2rem; padding:0.5rem 0;">
+        <p style="font-size:0.88rem; color:var(--text-muted);">
+          Generate a printer-friendly itinerary, save as high-resolution PDF, or format formatted text ready to send via Email or Text message (SMS).
+        </p>
+
+        <!-- Filter Options -->
+        <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:8px; padding:1rem; display:flex; flex-direction:column; gap:0.9rem;">
+          <div style="font-weight:700; font-size:0.9rem; color:var(--text-main);">📅 1. Select Date Range to Output:</div>
+          
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.8rem;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label>Export Mode</label>
+              <select id="printDateModeSelect">
+                <option value="all">🌐 All Dates (Complete Journey)</option>
+                <option value="single">📅 Single Date</option>
+                <option value="range">📆 Custom Date Range</option>
+              </select>
+            </div>
+
+            <div class="form-group" id="printSingleDateGroup" style="margin-bottom:0; display:none;">
+              <label>Select Date</label>
+              <select id="printSingleDateSelect"></select>
+            </div>
+
+            <div class="form-row" id="printRangeDateGroup" style="margin-bottom:0; display:none; grid-column: 1 / -1;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label>From Date</label>
+                <input type="date" id="printRangeStart" />
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label>To Date</label>
+                <input type="date" id="printRangeEnd" />
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:0.6rem; margin-top:0.2rem;">
+            <input type="checkbox" id="printIncludeTodoCheck" checked style="cursor:pointer;" />
+            <label for="printIncludeTodoCheck" style="cursor:pointer; font-size:0.85rem; color:var(--text-main); margin-bottom:0;">
+              Include Unscheduled Bucket List (To-Do items)
+            </label>
+          </div>
+        </div>
+
+        <!-- Output Action Buttons -->
+        <div style="display:flex; flex-direction:column; gap:0.8rem;">
+          <div style="font-weight:700; font-size:0.9rem; color:var(--text-main);">⚡ 2. Choose Output Action:</div>
+
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:0.8rem;">
+            <button type="button" class="btn btn-primary" id="triggerPrintPdfBtn" style="justify-content:center; padding:0.75rem 1rem;">
+              🖨️ Print / Save as PDF
+            </button>
+            <button type="button" class="btn btn-secondary" id="triggerOpenPrintTabBtn" style="justify-content:center; padding:0.75rem 1rem;">
+              📄 Open Print View (New Tab)
+            </button>
+            <button type="button" class="btn btn-secondary" id="triggerEmailShareBtn" style="justify-content:center; padding:0.75rem 1rem;">
+              ✉️ Send by Email
+            </button>
+            <button type="button" class="btn btn-secondary" id="triggerSmsShareBtn" style="justify-content:center; padding:0.75rem 1rem;">
+              💬 Send by Text / SMS
+            </button>
+          </div>
+        </div>
+
+        <!-- Formatted Text Preview & Clipboard Copy Area -->
+        <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:8px; padding:1rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem; flex-wrap:wrap; gap:0.5rem;">
+            <div style="font-weight:700; font-size:0.85rem; color:#38bdf8;">
+              📋 Formatted Preview (Includes Name, Distance, Transit, Highlights):
+            </div>
+            <div style="display:flex; gap:0.4rem;">
+              <button type="button" id="copyEmailTextBtn" class="btn btn-secondary btn-sm" style="font-size:0.75rem;">
+                📋 Copy Email Text
+              </button>
+              <button type="button" id="copySmsTextBtn" class="btn btn-secondary btn-sm" style="font-size:0.75rem;">
+                📋 Copy SMS Text
+              </button>
+            </div>
+          </div>
+          <textarea id="printFormattedTextarea" readonly style="width:100%; height:160px; background:#090d16; border:1px solid var(--border); color:#cbd5e1; border-radius:6px; padding:0.8rem; font-family:monospace; font-size:0.78rem; line-height:1.45; resize:vertical;"></textarea>
+        </div>
+
+      </div>
+
+      <div class="modal-actions" style="margin-top:1rem;">
+        <button type="button" class="btn btn-secondary" id="closePrintModalBtn2">Close</button>
       </div>
     </div>
   </div>

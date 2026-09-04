@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ trip.title }} - Printable Itinerary | Travel Scout</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-title: 'Space Grotesk', sans-serif;
+      --color-primary: #0284c7;
+      --color-dark: #0f172a;
+      --color-muted: #64748b;
+      --color-border: #cbd5e1;
+      --color-bg-box: #f8fafc;
+      --color-amber: #b45309;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-main);
+      color: #1e293b;
+      background: #f1f5f9;
+      line-height: 1.5;
+      padding: 1.5rem;
+    }
+
+    .print-wrapper {
+      max-width: 900px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 2.5rem 3rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+    }
+
+    /* Screen Action Bar */
+    .screen-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      padding-bottom: 1.2rem;
+      border-bottom: 2px solid #e2e8f0;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: var(--font-main);
+      font-weight: 600;
+      font-size: 0.9rem;
+      padding: 0.6rem 1.2rem;
+      border-radius: 8px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: #0284c7;
+      color: #ffffff;
+      border: 1px solid #0284c7;
+    }
+
+    .btn-primary:hover {
+      background: #0369a1;
+    }
+
+    .btn-secondary {
+      background: #ffffff;
+      color: #334155;
+      border: 1px solid #cbd5e1;
+    }
+
+    .btn-secondary:hover {
+      background: #f8fafc;
+    }
+
+    /* Header */
+    .print-header {
+      margin-bottom: 2rem;
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 1.5rem;
+    }
+
+    .logo-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 0.75rem;
+    }
+
+    .app-brand {
+      font-family: var(--font-title);
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #0284c7;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .trip-title {
+      font-family: var(--font-title);
+      font-size: 2.1rem;
+      font-weight: 700;
+      color: #0f172a;
+      line-height: 1.2;
+    }
+
+    .trip-meta {
+      font-size: 0.95rem;
+      color: var(--color-muted);
+      margin-top: 0.4rem;
+    }
+
+    .meta-badge {
+      display: inline-block;
+      background: #e0f2fe;
+      color: #0369a1;
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 0.82rem;
+      margin-right: 0.5rem;
+    }
+
+    /* Accommodations Block */
+    .accommodations-summary {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 1.2rem;
+      margin-bottom: 2rem;
+    }
+
+    .section-title {
+      font-family: var(--font-title);
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .stays-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 0.8rem;
+    }
+
+    .stay-item {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 0.8rem;
+      font-size: 0.85rem;
+    }
+
+    .stay-item strong {
+      color: #0284c7;
+      display: block;
+      font-size: 0.95rem;
+    }
+
+    /* Day Blocks */
+    .day-section {
+      margin-bottom: 2.2rem;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .day-banner {
+      background: #0f172a;
+      color: #ffffff;
+      padding: 0.65rem 1rem;
+      border-radius: 6px;
+      font-family: var(--font-title);
+      font-size: 1.1rem;
+      font-weight: 700;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .day-hotel-sub {
+      font-size: 0.85rem;
+      color: #0284c7;
+      font-weight: 600;
+      margin-bottom: 0.8rem;
+      padding-left: 0.2rem;
+    }
+
+    /* Item Card for Print */
+    .item-card-print {
+      border: 1px solid #cbd5e1;
+      border-left: 4px solid #0284c7;
+      border-radius: 6px;
+      padding: 1rem 1.1rem;
+      margin-bottom: 1rem;
+      background: #ffffff;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .card-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 0.35rem;
+    }
+
+    .item-name {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .item-name a {
+      color: #0f172a;
+      text-decoration: none;
+    }
+
+    .item-cost {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #b45309;
+      background: #fef3c7;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+
+    /* Transit Box */
+    .transit-info-box {
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      border-radius: 6px;
+      padding: 0.5rem 0.8rem;
+      margin: 0.5rem 0;
+      font-size: 0.84rem;
+      color: #0369a1;
+    }
+
+    .transit-info-box strong {
+      color: #0c4a6e;
+    }
+
+    /* Description */
+    .item-desc {
+      font-size: 0.88rem;
+      color: #334155;
+      margin: 0.5rem 0;
+      line-height: 1.45;
+    }
+
+    .item-highlight {
+      font-size: 0.84rem;
+      font-style: italic;
+      color: #475569;
+      background: #f8fafc;
+      border-left: 3px solid #94a3b8;
+      padding: 0.35rem 0.65rem;
+      margin: 0.4rem 0;
+    }
+
+    .item-meta-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.78rem;
+      color: var(--color-muted);
+      border-top: 1px dashed #e2e8f0;
+      padding-top: 0.45rem;
+      margin-top: 0.5rem;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .item-meta-footer a {
+      color: #0284c7;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    /* Print Specific Media Rules */
+    @media print {
+      body {
+        background: #ffffff !important;
+        padding: 0 !important;
+      }
+
+      .print-wrapper {
+        box-shadow: none !important;
+        padding: 0 !important;
+        max-width: 100% !important;
+      }
+
+      .no-print {
+        display: none !important;
+      }
+
+      .day-section {
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+
+      .item-card-print {
+        page-break-inside: avoid;
+        break-inside: avoid;
+        border: 1px solid #94a3b8 !important;
+      }
+
+      .day-banner {
+        background: #1e293b !important;
+        color: #ffffff !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .transit-info-box {
+        background: #f0f9ff !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      a {
+        text-decoration: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-wrapper">
+    
+    <!-- Top Action Bar (hidden when printing) -->
+    <div class="screen-actions no-print">
+      <div style="display:flex; align-items:center; gap:0.5rem;">
+        <a href="/" class="btn btn-secondary">&larr; Back to Dashboard</a>
+        <span style="font-size:0.85rem; color:#64748b;">Showing: <strong>{{ filter_label }}</strong></span>
+      </div>
+      <div style="display:flex; gap:0.5rem;">
+        <button onclick="window.print()" class="btn btn-primary">
+          🖨️ Print / Save as PDF
+        </button>
+      </div>
+    </div>
+
+    <!-- Printable Header -->
+    <div class="print-header">
+      <div class="logo-row">
+        <div class="app-brand">🌍 Travel Scout</div>
+        <div style="font-size:0.82rem; color:#64748b;">Generated: {{ now_str }}</div>
+      </div>
+      <h1 class="trip-title">{{ trip.title }}</h1>
+      {% if trip.description %}
+      <p class="trip-meta" style="font-size:1rem; color:#334155; margin-top:0.3rem;">
+        {{ trip.description }}
+      </p>
+      {% endif %}
+      <div class="trip-meta" style="margin-top:0.6rem;">
+        <span class="meta-badge">📅 Dates: {{ date_range_str }}</span>
+        <span class="meta-badge">🏙️ Cities: {{ cities|map(attribute='city_name')|join(', ') }}</span>
+        <span class="meta-badge">👥 Team: {{ collaborators|map(attribute='name')|join(', ') }}</span>
+      </div>
+    </div>
+
+    <!-- Active Stays / Accommodations Reference -->
+    {% if stays %}
+    <div class="accommodations-summary">
+      <div class="section-title">🏨 Accommodations &amp; Stays Reference</div>
+      <div class="stays-list">
+        {% for s in stays %}
+        <div class="stay-item">
+          <strong>🏨 {{ s.name }}</strong>
+          <div>📍 {{ s.address }}</div>
+          <div style="color:#b45309; font-weight:600; font-size:0.8rem; margin-top:0.2rem;">
+            📅 Check-in: {{ s.start_date }} &bull; Check-out: {{ s.end_date }}
+          </div>
+          {% if s.notes %}
+          <div style="font-size:0.75rem; color:#64748b; margin-top:0.2rem;"><em>{{ s.notes }}</em></div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Day-by-Day Schedule -->
+    {% for day in days %}
+    <div class="day-section">
+      <div class="day-banner">
+        <div>📅 Day {{ loop.index }}: {{ day.date }}</div>
+        <div style="font-size:0.9rem; font-weight:normal;">{{ day.stops|length }} Stops</div>
+      </div>
+
+      {% if day.active_stay %}
+      <div class="day-hotel-sub">
+        🏨 Active Hotel Base: <strong>{{ day.active_stay.name }}</strong> ({{ day.active_stay.address }})
+      </div>
+      {% endif %}
+
+      {% if day.stops|length == 0 %}
+      <p style="color:#64748b; font-size:0.9rem; font-style:italic; padding:0.5rem 0;">No stops scheduled for this date.</p>
+      {% else %}
+        {% for item in day.stops %}
+        <div class="item-card-print">
+          <div class="card-header-row">
+            <div>
+              <div class="item-name">
+                {{ loop.index }}. 
+                {% if item.url %}
+                  <a href="{{ item.url }}" target="_blank">{{ item.title }}</a>
+                {% else %}
+                  {{ item.title }}
+                {% endif %}
+              </div>
+              <div style="font-size:0.8rem; color:#64748b; margin-top:0.15rem;">
+                📍 {{ item.neighborhood or item.city_name }} &bull; Category: {{ item.category|capitalize }}
+                {% if item.time_info %} &bull; ⏰ {{ item.time_info }}{% endif %}
+              </div>
+            </div>
+            <span class="item-cost">{{ item.cost or 'Free' }}</span>
+          </div>
+
+          <!-- Transit Info Box -->
+          {% if item.transit %}
+          <div class="transit-info-box">
+            🚶 <strong>{{ item.transit.miles or '?' }} mi from {{ item.transit.stay_name or 'hotel' }}</strong> ({{ item.transit.walk_time or '' }})
+            {% if item.transit.best_mode %}
+            &bull; Mode: <strong>{{ item.transit.best_mode }}</strong>
+            {% endif %}
+            {% if item.transit.summary %}
+            <div><em>{{ item.transit.summary }}</em></div>
+            {% endif %}
+          </div>
+          {% endif %}
+
+          <!-- Description & Highlight -->
+          {% if item.highlight %}
+          <div class="item-highlight">
+            &ldquo;{{ item.highlight }}&rdquo;
+          </div>
+          {% endif %}
+
+          {% if item.description %}
+          <p class="item-desc">
+            {{ item.description }}
+          </p>
+          {% endif %}
+
+          <div class="item-meta-footer">
+            <div>📍 Address: <strong>{{ item.address or 'City Center' }}</strong></div>
+            <div style="display:flex; gap:0.6rem;">
+              <span>👤 Added by: {{ item.added_by.name }}</span>
+              {% if item.url %}
+              &bull; <a href="{{ item.url }}" target="_blank">🌐 Website</a>
+              {% endif %}
+              &bull; <a href="https://www.google.com/maps/search/?api=1&query={{ item.lat }},{{ item.lon }}" target="_blank">🗺️ Maps</a>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    <!-- Unscheduled Wishlist (if included) -->
+    {% if include_todo and todo_items %}
+    <div class="day-section" style="margin-top:2.5rem; border-top:2px dashed #cbd5e1; padding-top:1.5rem;">
+      <div class="day-banner" style="background:#475569;">
+        <div>📋 Unscheduled Bucket List &amp; Wishlist</div>
+        <div style="font-size:0.9rem; font-weight:normal;">{{ todo_items|length }} Items</div>
+      </div>
+      <p style="font-size:0.85rem; color:#64748b; margin-bottom:1rem;">Additional curated cultural venues and recommendations to visit whenever time permits.</p>
+
+      {% for item in todo_items %}
+      <div class="item-card-print" style="border-left-color:#64748b;">
+        <div class="card-header-row">
+          <div>
+            <div class="item-name">
+              {% if item.url %}
+                <a href="{{ item.url }}" target="_blank">{{ item.title }}</a>
+              {% else %}
+                {{ item.title }}
+              {% endif %}
+            </div>
+            <div style="font-size:0.8rem; color:#64748b; margin-top:0.15rem;">
+              📍 {{ item.neighborhood or item.city_name }} &bull; {{ item.category|capitalize }}
+            </div>
+          </div>
+          <span class="item-cost">{{ item.cost or 'Free' }}</span>
+        </div>
+        {% if item.highlight %}
+        <div class="item-highlight">&ldquo;{{ item.highlight }}&rdquo;</div>
+        {% endif %}
+        {% if item.description %}
+        <p class="item-desc">{{ item.description }}</p>
+        {% endif %}
+        <div class="item-meta-footer">
+          <div>📍 {{ item.address or 'City Center' }}</div>
+          <div>👤 Added by: {{ item.added_by.name }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div style="margin-top:3rem; padding-top:1rem; border-top:1px solid #e2e8f0; text-align:center; font-size:0.8rem; color:#94a3b8;">
+      Generated with Travel Scout &bull; Multi-City Collaborative Journey Planner &bull; Date-Matched Accommodations &bull; http://127.0.0.1:8000
+    </div>
+
+  </div>
+
+  <script>
+    if (window.location.search.includes('autoprint=1')) {
+      window.addEventListener('load', () => {
+        setTimeout(() => window.print(), 350);
+      });
+    }
+  </script>
+</body>
+</html>

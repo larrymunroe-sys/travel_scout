@@ -452,6 +452,140 @@ async def get_trip_details(trip_id: str, request: Request, db: Session = Depends
         }
     }
 
+# ==================== PRINT & EXPORT VIEW ====================
+
+@app.get("/api/trips/{trip_id}/print", response_class=HTMLResponse)
+async def print_itinerary_view(
+    trip_id: str,
+    request: Request,
+    date: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    include_todo: bool = True,
+    autoprint: bool = False,
+    db: Session = Depends(get_db)
+):
+    """Render a dedicated, high-contrast, printer-friendly view formatted for Letter/A4 printing and PDF saving."""
+    user = get_current_user(request, db)
+    trip = check_trip_access(trip_id, user, db, require_edit=False)
+
+    collabs = [c.user for c in trip.collaborators]
+
+    # Stays and Cities
+    all_stays = []
+    for seg in sorted(trip.city_segments, key=lambda x: x.order_index):
+        for s in seg.stays:
+            all_stays.append(s)
+
+    # Format dates
+    all_dates = set()
+    for seg in trip.city_segments:
+        try:
+            curr = datetime.strptime(seg.start_date, "%Y-%m-%d")
+            end = datetime.strptime(seg.end_date, "%Y-%m-%d")
+            while curr <= end:
+                all_dates.add(curr.strftime("%Y-%m-%d"))
+                curr += timedelta(days=1)
+        except Exception:
+            pass
+    sorted_dates = sorted(list(all_dates))
+
+    # Apply date filter
+    filter_label = "All Dates (Full Itinerary)"
+    target_dates = sorted_dates
+    if date and date != "all":
+        target_dates = [d for d in sorted_dates if d == date]
+        filter_label = f"Single Date: {date}"
+    elif start_date and end_date:
+        target_dates = [d for d in sorted_dates if start_date <= d <= end_date]
+        filter_label = f"Date Range: {start_date} to {end_date}"
+
+    # Build items and transit
+    days_map = {d: [] for d in target_dates}
+    todo_items = []
+
+    for item in trip.items:
+        u = item.added_by
+        seg = item.city_segment
+        author_data = {
+            "id": u.id,
+            "name": u.name,
+            "email": u.email,
+            "avatar_color": u.avatar_color
+        }
+
+        active_stay = None
+        if seg and seg.stays:
+            active_stay = resolve_stay_for_date(seg.stays, item.assigned_date)
+
+        transit_info = calculate_transit_from_stay(
+            active_stay,
+            item.lat,
+            item.lon,
+            city_name=seg.city_name if seg else "City"
+        )
+
+        item_dict = {
+            "id": item.id,
+            "title": item.title,
+            "category": item.category,
+            "neighborhood": item.neighborhood,
+            "address": item.address,
+            "lat": item.lat,
+            "lon": item.lon,
+            "cost": item.cost,
+            "is_free": item.is_free,
+            "time_info": item.time_info,
+            "highlight": item.highlight,
+            "description": item.description,
+            "url": item.url,
+            "source_platform": item.source_platform,
+            "assigned_date": item.assigned_date,
+            "added_by": author_data,
+            "transit": transit_info
+        }
+
+        if item.assigned_date in days_map:
+            days_map[item.assigned_date].append(item_dict)
+        elif not item.assigned_date or item.assigned_date == "todo":
+            todo_items.append(item_dict)
+
+    # Attach active stays to days
+    days_list = []
+    for d in target_dates:
+        day_stay = None
+        for seg in trip.city_segments:
+            s = resolve_stay_for_date(seg.stays, d)
+            if s:
+                day_stay = s
+                break
+        days_list.append({
+            "date": d,
+            "active_stay": day_stay,
+            "stops": days_map.get(d, []),
+            "items": days_map.get(d, [])
+        })
+
+    date_range_str = f"{sorted_dates[0]} to {sorted_dates[-1]}" if sorted_dates else "Flexible"
+
+    return templates.TemplateResponse(
+        request=request,
+        name="print.html",
+        context={
+            "trip": trip,
+            "collaborators": collabs,
+            "cities": trip.city_segments,
+            "stays": all_stays,
+            "days": days_list,
+            "todo_items": todo_items if include_todo else [],
+            "include_todo": include_todo,
+            "filter_label": filter_label,
+            "date_range_str": date_range_str,
+            "now_str": datetime.now().strftime("%B %d, %Y"),
+            "autoprint": autoprint
+        }
+    )
+
 # ==================== CITY CRUD ====================
 
 @app.post("/api/trips/{trip_id}/cities")
