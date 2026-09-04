@@ -1653,6 +1653,15 @@ function initModals() {
     });
   }
 
+  const headerDeleteTripBtn = document.getElementById("headerDeleteTripBtn");
+  if (headerDeleteTripBtn) {
+    headerDeleteTripBtn.addEventListener("click", () => {
+      if (deleteTripBtn) {
+        deleteTripBtn.click();
+      }
+    });
+  }
+
   // Create Trip Modal
   const createTripModal = document.getElementById("createTripModal");
   const openCreateTripBtn = document.getElementById("openCreateTripBtn");

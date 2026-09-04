@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/styles.css?v=2.2" />
 </head>
 <body>
   <!-- Header -->
@@ -21,6 +21,7 @@
             <h1 class="logo-title">Travel Scout</h1>
             <button id="openEditTripBtn" class="btn btn-secondary btn-sm" style="padding:0.2rem 0.55rem; font-size:0.75rem;" title="Rename journey or edit description">✏️ Customize</button>
             <button id="openCreateTripBtn" class="btn btn-secondary btn-sm" style="padding:0.2rem 0.55rem; font-size:0.75rem;" title="Start a fresh trip from scratch">➕ New Trip</button>
+            <button id="headerDeleteTripBtn" class="btn btn-secondary btn-sm" style="padding:0.2rem 0.55rem; font-size:0.75rem; background:rgba(244,63,94,0.15); color:#fca5a5; border:1px solid rgba(244,63,94,0.4); cursor:pointer;" title="Permanently delete this entire trip">🗑️ Delete Trip</button>
             <select id="tripSwitcherSelect" class="user-switcher" style="padding:0.25rem 0.5rem; font-size:0.75rem; border-radius:6px; background:rgba(255,255,255,0.06); border:1px solid var(--border); color:var(--text-main);" title="Switch between saved itineraries"></select>
           </div>
           <p class="logo-subtitle" id="tripSubtitle">Portugal Grand Expedition &bull; Lisbon &rarr; Porto &rarr; Bragança</p>
@@ -849,6 +850,6 @@
   </footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=2.2"></script>
 </body>
 </html>
