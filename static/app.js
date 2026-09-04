@@ -1252,8 +1252,17 @@ function renderExploreCard(item, availableDates) {
     ? `<span class="badge badge-clickable" data-filter-type="neighborhood" data-filter-value="${escapeHtml(item.neighborhood)}" style="background:rgba(168,85,247,0.12); color:#c084fc; border:1px solid rgba(168,85,247,0.28);" title="Click to filter by neighborhood ${escapeHtml(item.neighborhood)}">📍 ${escapeHtml(item.neighborhood)}</span>`
     : '';
 
+  let sourceIcon = "🌐";
+  if (/eventbrite/i.test(item.source_platform)) sourceIcon = "🎟️";
+  else if (/songkick/i.test(item.source_platform)) sourceIcon = "🎸";
+  else if (/dice/i.test(item.source_platform)) sourceIcon = "🎲";
+  else if (/ticketmaster/i.test(item.source_platform)) sourceIcon = "🎫";
+  else if (/venue/i.test(item.source_platform)) sourceIcon = "🏛️";
+  else if (/reddit/i.test(item.source_platform)) sourceIcon = "💬";
+  else if (/tiktok/i.test(item.source_platform)) sourceIcon = "🎬";
+
   const sourceBadge = item.source_platform
-    ? `<span class="badge badge-web" title="Scout Source">🌐 ${escapeHtml(item.source_platform)}</span>`
+    ? `<span class="badge badge-web" title="Scout Source">${sourceIcon} ${escapeHtml(item.source_platform)}</span>`
     : `<span class="badge badge-curated" title="Curated Essential">🏛️ Curated</span>`;
 
   const transitBadge = (transit && transit.miles)
@@ -2076,7 +2085,16 @@ function initScout() {
             const hasUrl = Boolean(r.url && r.url.trim() !== "");
             const targetUrl = hasUrl ? r.url : `https://www.google.com/search?q=${encodeURIComponent(r.title + ' ' + city)}`;
             const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.title + ' ' + (r.address || city))}`;
-            return `
+                let pIcon = "🌐";
+                if (/eventbrite/i.test(r.source_platform)) pIcon = "🎟️";
+                else if (/songkick/i.test(r.source_platform)) pIcon = "🎸";
+                else if (/dice/i.test(r.source_platform)) pIcon = "🎲";
+                else if (/ticketmaster/i.test(r.source_platform)) pIcon = "🎫";
+                else if (/venue/i.test(r.source_platform)) pIcon = "🏛️";
+                else if (/reddit/i.test(r.source_platform)) pIcon = "💬";
+                else if (/tiktok/i.test(r.source_platform)) pIcon = "🎬";
+
+                return `
               <div class="itin-card">
                 <div class="card-top-row">
                   <div class="card-title">
@@ -2087,11 +2105,11 @@ function initScout() {
                   </div>
                   <span class="card-city-badge">${escapeHtml(city)}</span>
                 </div>
-                <div style="font-size:0.8rem; color:#38bdf8;">Platform: <strong>${escapeHtml(r.source_platform)}</strong></div>
+                <div style="font-size:0.8rem; color:#38bdf8;">Platform: <strong>${pIcon} ${escapeHtml(r.source_platform)}</strong></div>
                 <p style="font-size:0.82rem; color:var(--text-muted);">${escapeHtml(r.highlight)}</p>
                 <div class="card-links-row">
                   <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" class="item-link-pill primary" title="View on source platform">
-                    🌐 ${escapeHtml(r.source_platform || 'Web Source')} ↗
+                    ${pIcon} ${escapeHtml(r.source_platform || 'Web Source')} ↗
                   </a>
                   <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" class="item-link-pill maps" title="Open in Google Maps">
                     📍 Maps ↗

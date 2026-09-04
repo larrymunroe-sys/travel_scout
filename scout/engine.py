@@ -398,7 +398,7 @@ class ScoutEngine:
         all_new_items = []
 
         scan_templates = [
-            ("cultural festival concerts and music events", "music", "all"),
+            ("live music concerts gig guide tickets and venues", "music", "music"),
             ("top wine tastings and cellars", "wine", "guides"),
             ("hidden gems and secret viewpoints Reddit", "gems", "reddit"),
             ("new restaurant openings and food finds", "dining", "blogs"),

@@ -63,9 +63,12 @@ CATEGORIES: Dict[str, Dict[str, str]] = {
 
 SEARCH_CHANNELS: Dict[str, Dict[str, str]] = {
     "all": {"label": "🌐 All Sources (Combined)", "badge": "All"},
+    "music": {"label": "🎵 Live Music & Tickets (Eventbrite, DICE, Songkick, Ticketmaster)", "badge": "Live Music"},
+    "venues": {"label": "🏛️ Music Venues & Concert Halls", "badge": "Venues"},
     "guides": {"label": "📖 Travel Guides (Lonely Planet, TimeOut, Fodor's)", "badge": "Guides"},
     "blogs": {"label": "✍️ Food & Culture Blogs (Eater, Local Blogs)", "badge": "Blogs"},
     "reddit": {"label": "💬 Reddit Community Advice (r/lisboa, r/porto, r/portugal)", "badge": "Reddit"},
     "tiktok": {"label": "🎬 TikTok Viral Spots & Trends", "badge": "TikTok"},
     "social": {"label": "📱 Social Channels & Festival Calendars", "badge": "Social"},
 }
+
