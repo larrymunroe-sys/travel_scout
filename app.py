@@ -58,12 +58,7 @@ def get_optional_current_user(request: Request, db: Session = Depends(get_db)) -
         if user:
             return user
 
-    # Default to Larry Munroe if no cookie on first visit
-    default_user = db.query(User).filter(User.email == "larrymunroe@gmail.com").first()
-    if default_user:
-        return default_user
-
-    return db.query(User).first()
+    return None
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     """Retrieve user from session cookie or raise 401 if logged out."""
@@ -409,6 +404,119 @@ async def logout(request: Request, response: Response):
         secure=is_https
     )
     return {"status": "logged_out"}
+
+# ==================== USER MANAGEMENT API ROUTES ====================
+
+@app.get("/api/users")
+async def list_all_users(db: Session = Depends(get_db)):
+    """List all registered users with their trip count and metadata."""
+    users = db.query(User).order_by(User.created_at.asc()).all()
+    demo_emails = {"larrymunroe@gmail.com", "sarah.chen@gmail.com"}
+    result = []
+    for u in users:
+        trips_count = db.query(Trip).filter(Trip.owner_id == u.id).count()
+        collab_count = db.query(TripCollaborator).filter(TripCollaborator.user_id == u.id).count()
+        result.append({
+            "id": u.id,
+            "name": u.name,
+            "email": u.email,
+            "avatar_url": u.avatar_url,
+            "avatar_color": u.avatar_color,
+            "created_at": u.created_at.strftime("%b %d, %Y") if u.created_at else "Earlier",
+            "trips_count": trips_count,
+            "collab_count": collab_count,
+            "is_demo": (u.email in demo_emails)
+        })
+    return result
+
+@app.delete("/api/users/{user_id}")
+async def delete_user(user_id: str, request: Request, response: Response, db: Session = Depends(get_db)):
+    """Permanently delete a user, cascading their owned trips and cleaning up relationships."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    deleted_email = user.email
+
+    # 1. Trips owned by this user -> delete (cascades to city segments, stays, items)
+    trips_owned = db.query(Trip).filter(Trip.owner_id == user.id).all()
+    for t in trips_owned:
+        db.delete(t)
+
+    # 2. Trip collaborations
+    db.query(TripCollaborator).filter(TripCollaborator.user_id == user.id).delete()
+
+    # 3. Clean up personal notes written by this user
+    db.query(ItineraryItem).filter(ItineraryItem.note_by_user_id == user.id).update({
+        "note_by_user_id": None,
+        "personal_note": None
+    })
+
+    # 4. Items added by this user to other people's trips -> reassign to trip owner
+    other_items = db.query(ItineraryItem).filter(ItineraryItem.added_by_user_id == user.id).all()
+    for item in other_items:
+        if item.trip and item.trip.owner_id != user.id:
+            item.added_by_user_id = item.trip.owner_id
+        else:
+            db.delete(item)
+
+    # 5. Delete the user
+    db.delete(user)
+    db.commit()
+
+    # If the deleted user was active in session, clear cookie
+    current_cookie = request.cookies.get("travel_scout_user_id")
+    was_logged_in = (current_cookie == user_id)
+    if was_logged_in:
+        response.delete_cookie(key="travel_scout_user_id", path="/")
+
+    return {
+        "status": "success",
+        "message": f"User {deleted_email} has been permanently deleted.",
+        "was_logged_in": was_logged_in
+    }
+
+@app.post("/api/users/cleanup-demo")
+async def cleanup_demo_users(request: Request, response: Response, db: Session = Depends(get_db)):
+    """Delete all pre-seeded demo accounts (larrymunroe@gmail.com, sarah.chen@gmail.com) and their demo trips."""
+    demo_emails = ["larrymunroe@gmail.com", "sarah.chen@gmail.com"]
+    users = db.query(User).filter(User.email.in_(demo_emails)).all()
+    deleted_names = []
+    current_cookie = request.cookies.get("travel_scout_user_id")
+    was_logged_in = False
+
+    for user in users:
+        deleted_names.append(user.email)
+        if current_cookie == user.id:
+            was_logged_in = True
+
+        # Delete owned trips
+        trips = db.query(Trip).filter(Trip.owner_id == user.id).all()
+        for t in trips:
+            db.delete(t)
+
+        # Delete collaborations
+        db.query(TripCollaborator).filter(TripCollaborator.user_id == user.id).delete()
+
+        # Clean up item notes
+        db.query(ItineraryItem).filter(ItineraryItem.note_by_user_id == user.id).update({
+            "note_by_user_id": None,
+            "personal_note": None
+        })
+
+        db.delete(user)
+
+    db.commit()
+
+    if was_logged_in:
+        response.delete_cookie(key="travel_scout_user_id", path="/")
+
+    return {
+        "status": "success",
+        "deleted_users": deleted_names,
+        "count": len(deleted_names),
+        "was_logged_in": was_logged_in
+    }
 
 # ==================== TRIP & CITY API ROUTES ====================
 

@@ -15,7 +15,24 @@ class ScoutEngine:
 
     def seed_initial_data_if_empty(self, db: Session):
         """Seed default demo trip and users if the database is newly initialized."""
+        import os
+        from database.connection import BASE_DIR
+        sentinel_file = BASE_DIR / ".demo_seeded"
+        if sentinel_file.exists():
+            return
+
+        if os.environ.get("DISABLE_DEMO_SEED", "false").lower() in ("true", "1", "yes"):
+            try:
+                sentinel_file.touch()
+            except Exception:
+                pass
+            return
+
         if db.query(User).count() > 0:
+            try:
+                sentinel_file.touch()
+            except Exception:
+                pass
             return
 
         # 1. Create Default Users (Owner & Collaborator)
@@ -236,6 +253,10 @@ class ScoutEngine:
             u_idx += 1
 
         db.commit()
+        try:
+            sentinel_file.touch()
+        except Exception:
+            pass
 
     def add_city(
         self,

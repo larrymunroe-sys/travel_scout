@@ -145,31 +145,35 @@ async function loadCurrentUser() {
     // Dynamically populate and attach Quick Pick list
     const quickPickContainer = document.getElementById("loginQuickPickList");
     const availUsers = data.available_users || [];
-    if (quickPickContainer && availUsers.length > 0) {
-      quickPickContainer.innerHTML = availUsers.map(u => `
-        <button type="button" class="btn btn-secondary quick-login-btn" data-email="${escapeHtml(u.email)}" data-name="${escapeHtml(u.name)}" style="justify-content:flex-start; padding:0.6rem 0.9rem; width:100%; text-align:left; border-color:rgba(255,255,255,0.08);">
-          <span class="user-avatar-badge" style="background:${u.avatar_url ? 'transparent' : (u.avatar_color || '#38bdf8')}; width:28px; height:28px; font-size:0.75rem; margin-right:0.75rem; flex-shrink:0;">
-            ${u.avatar_url ? `<img src="${escapeHtml(u.avatar_url)}" alt="${escapeHtml(u.name)}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;" />` : escapeHtml(u.name.slice(0, 2).toUpperCase())}
-          </span>
-          <div style="display:flex; flex-direction:column; flex:1;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <strong style="color:var(--text-main); font-size:0.86rem;">${escapeHtml(u.name)}</strong>
-              <span style="font-size:0.7rem; color:#38bdf8; font-weight:600;">Sign In &rarr;</span>
+    if (quickPickContainer) {
+      if (availUsers.length > 0) {
+        quickPickContainer.innerHTML = availUsers.map(u => `
+          <button type="button" class="btn btn-secondary quick-login-btn" data-email="${escapeHtml(u.email)}" data-name="${escapeHtml(u.name)}" style="justify-content:flex-start; padding:0.6rem 0.9rem; width:100%; text-align:left; border-color:rgba(255,255,255,0.08);">
+            <span class="user-avatar-badge" style="background:${u.avatar_url ? 'transparent' : (u.avatar_color || '#38bdf8')}; width:28px; height:28px; font-size:0.75rem; margin-right:0.75rem; flex-shrink:0;">
+              ${u.avatar_url ? `<img src="${escapeHtml(u.avatar_url)}" alt="${escapeHtml(u.name)}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;" />` : escapeHtml(u.name.slice(0, 2).toUpperCase())}
+            </span>
+            <div style="display:flex; flex-direction:column; flex:1;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <strong style="color:var(--text-main); font-size:0.86rem;">${escapeHtml(u.name)}</strong>
+                <span style="font-size:0.7rem; color:#38bdf8; font-weight:600;">Sign In &rarr;</span>
+              </div>
+              <span style="font-size:0.75rem; color:#94a3b8; font-family:var(--font-mono, monospace);">✉️ ${escapeHtml(u.email)}</span>
             </div>
-            <span style="font-size:0.75rem; color:#94a3b8; font-family:var(--font-mono, monospace);">✉️ ${escapeHtml(u.email)}</span>
-          </div>
-        </button>
-      `).join("");
+          </button>
+        `).join("");
 
-      quickPickContainer.querySelectorAll(".quick-login-btn").forEach(btn => {
-        btn.onclick = async () => {
-          const email = btn.dataset.email;
-          const name = btn.dataset.name;
-          if (email && name) {
-            await loginAs(email, name);
-          }
-        };
-      });
+        quickPickContainer.querySelectorAll(".quick-login-btn").forEach(btn => {
+          btn.onclick = async () => {
+            const email = btn.dataset.email;
+            const name = btn.dataset.name;
+            if (email && name) {
+              await loginAs(email, name);
+            }
+          };
+        });
+      } else {
+        quickPickContainer.innerHTML = `<p style="font-size:0.78rem; color:var(--text-muted); font-style:italic; margin:0.4rem 0;">No saved traveler profiles. Sign in with Google above or enter an address below.</p>`;
+      }
     }
 
     // Custom login form
@@ -185,31 +189,187 @@ async function loadCurrentUser() {
       };
     }
 
-    // Switcher dropdown
+    // Switcher dropdown: Only action options, NO cached users listed
     const switcher = document.getElementById("userSwitcherSelect");
     if (switcher) {
-      if (availUsers.length > 0) {
-        switcher.innerHTML = `
-          <option value="" disabled selected>Switch Account...</option>
-          ${availUsers.map(u => `<option value="${escapeHtml(u.email)}" ${currentUser && u.id === currentUser.id ? 'selected' : ''}>${escapeHtml(u.name)} (${escapeHtml(u.email)})</option>`).join("")}
-          <option value="new">+ Add New Collaborator Account</option>
-        `;
-      }
-      switcher.addEventListener("change", async (e) => {
+      const activeLabel = currentUser ? `👤 ${currentUser.name}` : "Account Menu...";
+      switcher.innerHTML = `
+        <option value="" disabled selected>${escapeHtml(activeLabel)}</option>
+        <option value="switch">🔑 Switch / Sign In Account</option>
+        <option value="manage">👥 Manage & Delete Users</option>
+        ${currentUser ? `<option value="logout">🚪 Log Off</option>` : ''}
+      `;
+      switcher.onchange = async (e) => {
         const val = e.target.value;
-        if (val === "new") {
+        if (val === "switch") {
           openLogin();
-          switcher.value = "";
-        } else if (val) {
-          const userObj = availUsers.find(u => u.email === val);
-          if (userObj) {
-            await loginAs(userObj.email, userObj.name);
+        } else if (val === "manage") {
+          openManageUsersModal();
+        } else if (val === "logout") {
+          if (confirm(`Log off from ${currentUser ? currentUser.email : 'Travel Scout'}?`)) {
+            await logoff();
           }
         }
-      });
+        switcher.selectedIndex = 0;
+      };
     }
+
+    // Manage Users modal buttons
+    const openManageUsersBtn = document.getElementById("openManageUsersBtn");
+    const manageUsersFromLoginBtn = document.getElementById("manageUsersFromLoginBtn");
+    const closeManageUsersModalBtn = document.getElementById("closeManageUsersModalBtn");
+    const closeManageUsersModalBtn2 = document.getElementById("closeManageUsersModalBtn2");
+    const cleanupDemoBtn = document.getElementById("cleanupDemoBtn");
+
+    if (openManageUsersBtn) openManageUsersBtn.onclick = openManageUsersModal;
+    if (manageUsersFromLoginBtn) {
+      manageUsersFromLoginBtn.onclick = () => {
+        closeLogin();
+        openManageUsersModal();
+      };
+    }
+    if (closeManageUsersModalBtn) closeManageUsersModalBtn.onclick = closeManageUsersModal;
+    if (closeManageUsersModalBtn2) closeManageUsersModalBtn2.onclick = closeManageUsersModal;
+    if (cleanupDemoBtn) cleanupDemoBtn.onclick = purgeDemoAccounts;
+
   } catch (err) {
     console.error("Auth check error:", err);
+  }
+}
+
+// User Management Modal Handlers
+function getAuthHeaders(extra = {}) {
+  const localUserId = localStorage.getItem("travel_scout_user_id");
+  const headers = { ...extra };
+  if (localUserId) {
+    headers["x-travel-scout-user-id"] = localUserId;
+  }
+  return headers;
+}
+
+async function openManageUsersModal() {
+  const modal = document.getElementById("manageUsersModal");
+  if (!modal) return;
+  modal.style.display = "flex";
+  await loadManageUsers();
+}
+
+function closeManageUsersModal() {
+  const modal = document.getElementById("manageUsersModal");
+  if (modal) modal.style.display = "none";
+}
+
+async function loadManageUsers() {
+  const listEl = document.getElementById("manageUsersList");
+  const countEl = document.getElementById("manageUsersCount");
+  if (!listEl) return;
+
+  try {
+    const res = await fetch("/api/users", {
+      headers: getAuthHeaders(),
+      credentials: "include"
+    });
+    const users = await res.json();
+    if (countEl) countEl.textContent = users.length;
+
+    if (!users || users.length === 0) {
+      listEl.innerHTML = `<p style="font-size:0.85rem; color:var(--text-muted); font-style:italic; padding:0.5rem 0;">No registered users found in database.</p>`;
+      return;
+    }
+
+    listEl.innerHTML = users.map(u => {
+      const isCurrent = (currentUser && currentUser.id === u.id);
+      return `
+        <div style="display:flex; justify-content:space-between; align-items:center; background:#0f172a; border:1px solid ${isCurrent ? '#38bdf8' : 'rgba(255,255,255,0.08)'}; border-radius:6px; padding:0.6rem 0.85rem; gap:0.75rem;">
+          <div style="display:flex; align-items:center; gap:0.75rem; min-width:0;">
+            <div class="user-avatar-badge" style="background:${u.avatar_url ? 'transparent' : (u.avatar_color || '#38bdf8')}; width:32px; height:32px; font-size:0.8rem; flex-shrink:0;">
+              ${u.avatar_url ? `<img src="${escapeHtml(u.avatar_url)}" alt="${escapeHtml(u.name)}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;" />` : escapeHtml(u.name.slice(0, 2).toUpperCase())}
+            </div>
+            <div style="min-width:0;">
+              <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
+                <strong style="color:var(--text-main); font-size:0.86rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(u.name)}</strong>
+                ${isCurrent ? `<span style="background:#38bdf8; color:#0f172a; font-size:0.65rem; font-weight:700; padding:0.1rem 0.35rem; border-radius:3px;">YOU</span>` : ''}
+                ${u.is_demo ? `<span style="background:#f97316; color:#ffffff; font-size:0.65rem; font-weight:700; padding:0.1rem 0.35rem; border-radius:3px;">DEMO</span>` : ''}
+              </div>
+              <div style="font-size:0.75rem; color:#94a3b8; font-family:var(--font-mono, monospace); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                ✉️ ${escapeHtml(u.email)} &bull; ${u.trips_count} trip(s)
+              </div>
+            </div>
+          </div>
+          <button type="button" class="btn btn-sm btn-delete-user" data-id="${u.id}" data-name="${escapeHtml(u.name)}" data-email="${escapeHtml(u.email)}" style="background:#ef4444; color:#fff; padding:0.35rem 0.65rem; font-size:0.75rem; border:none; border-radius:4px; cursor:pointer; flex-shrink:0;">
+            🗑️ Delete
+          </button>
+        </div>
+      `;
+    }).join("");
+
+    listEl.querySelectorAll(".btn-delete-user").forEach(btn => {
+      btn.onclick = async () => {
+        const uid = btn.dataset.id;
+        const uname = btn.dataset.name;
+        const uemail = btn.dataset.email;
+        if (confirm(`Are you sure you want to permanently delete user "${uname}" (${uemail})?\n\nThis will also delete any itineraries and data owned by this account.`)) {
+          await deleteUserAccount(uid);
+        }
+      };
+    });
+
+  } catch (err) {
+    console.error("Failed to load users:", err);
+    listEl.innerHTML = `<p style="font-size:0.82rem; color:#ef4444;">Failed to load registered users.</p>`;
+  }
+}
+
+async function deleteUserAccount(userId) {
+  try {
+    const res = await fetch(`/api/users/${userId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+      credentials: "include"
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.detail || "Failed to delete user");
+      return;
+    }
+    alert(data.message || "User deleted successfully!");
+    if (data.was_logged_in) {
+      localStorage.removeItem("travel_scout_user_id");
+      window.location.reload();
+    } else {
+      await loadManageUsers();
+      await loadCurrentUser();
+    }
+  } catch (err) {
+    alert("Error deleting user: " + err.message);
+  }
+}
+
+async function purgeDemoAccounts() {
+  if (!confirm("Are you sure you want to permanently delete the pre-seeded demo accounts (Larry Munroe and Sarah Chen) and their demo itineraries?\n\nThis will give you a completely clean instance for your own team.")) {
+    return;
+  }
+  try {
+    const res = await fetch("/api/users/cleanup-demo", {
+      method: "POST",
+      headers: getAuthHeaders(),
+      credentials: "include"
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.detail || "Failed to purge demo accounts");
+      return;
+    }
+    alert(`Demo accounts purged successfully! (${data.count} demo users removed)`);
+    if (data.was_logged_in) {
+      localStorage.removeItem("travel_scout_user_id");
+      window.location.reload();
+    } else {
+      await loadManageUsers();
+      await loadCurrentUser();
+    }
+  } catch (err) {
+    alert("Error purging demo accounts: " + err.message);
   }
 }
 
