@@ -7,6 +7,27 @@ let mapMarkersGroup = null;
 let mapRouteGroup = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
+  // Check for Google OAuth callback parameters in URL
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get("google_auth") === "success") {
+    const uid = urlParams.get("user_id");
+    if (uid) {
+      localStorage.setItem("travel_scout_user_id", uid);
+    }
+    window.history.replaceState({}, document.title, window.location.pathname);
+  } else if (urlParams.get("error")) {
+    const errCode = urlParams.get("error");
+    if (errCode === "google_oauth_not_configured") {
+      setTimeout(() => {
+        alert("🔑 Google OAuth 2.0 is enabled in the code!\n\nTo connect to your live Google accounts, please add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to your Render Environment Variables.\n\nIn the meantime, you can sign in using any team profile or enter your Gmail address!");
+        if (window.openLogin) window.openLogin();
+      }, 300);
+    } else {
+      alert("Google Sign-In note: " + decodeURIComponent(errCode));
+    }
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+
   initTabs();
   initModals();
   await loadCurrentUser();
@@ -65,8 +86,13 @@ async function loadCurrentUser() {
 
     if (currentUser) {
       if (avatarEl) {
-        avatarEl.style.background = currentUser.avatar_color || "#38bdf8";
-        avatarEl.textContent = currentUser.name.slice(0, 2).toUpperCase();
+        if (currentUser.avatar_url) {
+          avatarEl.innerHTML = `<img src="${escapeHtml(currentUser.avatar_url)}" alt="${escapeHtml(currentUser.name)}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;" />`;
+          avatarEl.style.background = "transparent";
+        } else {
+          avatarEl.style.background = currentUser.avatar_color || "#38bdf8";
+          avatarEl.textContent = currentUser.name.slice(0, 2).toUpperCase();
+        }
       }
       if (nameEl) nameEl.textContent = currentUser.name;
       if (roleEl) roleEl.textContent = "Active";
@@ -122,8 +148,8 @@ async function loadCurrentUser() {
     if (quickPickContainer && availUsers.length > 0) {
       quickPickContainer.innerHTML = availUsers.map(u => `
         <button type="button" class="btn btn-secondary quick-login-btn" data-email="${escapeHtml(u.email)}" data-name="${escapeHtml(u.name)}" style="justify-content:flex-start; padding:0.6rem 0.9rem; width:100%; text-align:left; border-color:rgba(255,255,255,0.08);">
-          <span class="user-avatar-badge" style="background:${u.avatar_color || '#38bdf8'}; width:28px; height:28px; font-size:0.75rem; margin-right:0.75rem; flex-shrink:0;">
-            ${escapeHtml(u.name.slice(0, 2).toUpperCase())}
+          <span class="user-avatar-badge" style="background:${u.avatar_url ? 'transparent' : (u.avatar_color || '#38bdf8')}; width:28px; height:28px; font-size:0.75rem; margin-right:0.75rem; flex-shrink:0;">
+            ${u.avatar_url ? `<img src="${escapeHtml(u.avatar_url)}" alt="${escapeHtml(u.name)}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;" />` : escapeHtml(u.name.slice(0, 2).toUpperCase())}
           </span>
           <div style="display:flex; flex-direction:column; flex:1;">
             <div style="display:flex; justify-content:space-between; align-items:center;">

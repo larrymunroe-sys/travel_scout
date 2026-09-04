@@ -1,10 +1,12 @@
-"""FastAPI Application for Multi-City Collaborative Travel Scout."""
+import os
+import urllib.parse
+import httpx
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 
 from fastapi import FastAPI, Depends, Request, Response, HTTPException, status
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -215,6 +217,130 @@ async def serve_index(request: Request, db: Session = Depends(get_db)):
         }
     )
 
+# ==================== GOOGLE OAUTH 2.0 CONFIG & ROUTES ====================
+
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
+
+def get_public_base_url(request: Request) -> str:
+    """Derive public URL accounting for Render's HTTPS reverse proxy."""
+    base = os.environ.get("BASE_URL")
+    if base:
+        return base.rstrip("/")
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host", request.headers.get("host", request.url.netloc))
+    return f"{proto}://{host}"
+
+@app.get("/auth/google/status")
+async def google_auth_status():
+    """Check whether Google OAuth credentials are configured in environment."""
+    return {
+        "configured": bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET),
+        "client_id": GOOGLE_CLIENT_ID if GOOGLE_CLIENT_ID else None
+    }
+
+@app.get("/auth/google/login")
+async def google_login(request: Request):
+    """Redirect to Google's OAuth 2.0 authorization endpoint."""
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        return RedirectResponse(url="/?error=google_oauth_not_configured")
+
+    base_url = get_public_base_url(request)
+    redirect_uri = f"{base_url}/auth/google/callback"
+
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "prompt": "select_account",
+    }
+    google_auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(params)}"
+    return RedirectResponse(url=google_auth_url)
+
+@app.get("/auth/google/callback")
+async def google_callback(
+    request: Request,
+    code: Optional[str] = None,
+    error: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Handle Google OAuth 2.0 redirect callback, exchange code, and sign in user."""
+    if error or not code:
+        return RedirectResponse(url=f"/?error={error or 'no_code'}")
+
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        return RedirectResponse(url="/?error=google_oauth_not_configured")
+
+    base_url = get_public_base_url(request)
+    redirect_uri = f"{base_url}/auth/google/callback"
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            token_resp = await client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "code": code,
+                    "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "redirect_uri": redirect_uri,
+                    "grant_type": "authorization_code",
+                },
+                headers={"Accept": "application/json"}
+            )
+            token_data = token_resp.json()
+            access_token = token_data.get("access_token")
+
+            if not access_token:
+                err_detail = token_data.get("error_description", "token_exchange_failed")
+                return RedirectResponse(url=f"/?error={urllib.parse.quote(str(err_detail))}")
+
+            userinfo_resp = await client.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"}
+            )
+            userinfo = userinfo_resp.json()
+            email = userinfo.get("email")
+            name = userinfo.get("name") or (email.split("@")[0] if email else "Google User")
+            picture = userinfo.get("picture")
+
+            if not email:
+                return RedirectResponse(url="/?error=no_email_provided")
+
+            user = db.query(User).filter(User.email == email).first()
+            if not user:
+                user = User(
+                    email=email,
+                    name=name,
+                    avatar_url=picture,
+                    avatar_color="#ea4335"
+                )
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+            else:
+                if picture and user.avatar_url != picture:
+                    user.avatar_url = picture
+                    db.commit()
+
+            is_https = request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https"
+            redirect_resp = RedirectResponse(url=f"/?google_auth=success&user_id={user.id}")
+            redirect_resp.set_cookie(
+                key="travel_scout_user_id",
+                value=user.id,
+                max_age=86400 * 30,
+                httponly=False,
+                path="/",
+                samesite="lax",
+                secure=is_https
+            )
+            return redirect_resp
+
+    except Exception as e:
+        print("Google OAuth error:", e)
+        return RedirectResponse(url="/?error=google_oauth_exception")
+
 # ==================== AUTH ROUTES ====================
 
 @app.post("/auth/dev-login")
@@ -247,7 +373,8 @@ async def dev_login(payload: DevLoginPayload, request: Request, response: Respon
             "id": user.id,
             "name": user.name,
             "email": user.email,
-            "avatar_color": user.avatar_color
+            "avatar_color": user.avatar_color,
+            "avatar_url": user.avatar_url
         }
     }
 
@@ -260,10 +387,11 @@ async def get_me(request: Request, db: Session = Depends(get_db)):
             "id": user.id,
             "name": user.name,
             "email": user.email,
-            "avatar_color": user.avatar_color
+            "avatar_color": user.avatar_color,
+            "avatar_url": user.avatar_url
         } if user else None,
         "available_users": [
-            {"id": u.id, "name": u.name, "email": u.email, "avatar_color": u.avatar_color}
+            {"id": u.id, "name": u.name, "email": u.email, "avatar_color": u.avatar_color, "avatar_url": u.avatar_url}
             for u in all_users
         ]
     }
