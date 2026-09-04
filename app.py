@@ -81,6 +81,24 @@ def get_user_accessible_trips(user: User, db: Session) -> List[Trip]:
             Trip.id.in_(collab_trip_ids)
         )
     ).all()
+
+    if not trips:
+        # Auto-create starter itinerary for this user so they can immediately plan and add cities
+        first_name = user.name.split()[0] if user.name else "My"
+        starter_trip = Trip(
+            title=f"{first_name}'s Travel Scout Itinerary",
+            description="Collaborative multi-city travel itinerary.",
+            owner_id=user.id
+        )
+        db.add(starter_trip)
+        db.commit()
+        db.refresh(starter_trip)
+
+        collab = TripCollaborator(trip_id=starter_trip.id, user_id=user.id, role="owner")
+        db.add(collab)
+        db.commit()
+        trips = [starter_trip]
+
     return trips
 
 def check_trip_access(trip_id: str, user: User, db: Session, require_edit: bool = False) -> Trip:
@@ -894,6 +912,13 @@ async def print_itinerary_view(
 async def add_city(trip_id: str, payload: AddCityPayload, request: Request, db: Session = Depends(get_db)):
     """Add a new destination city with starting accommodation."""
     user = get_current_user(request, db)
+    if trip_id in ("null", "undefined", "") or not trip_id:
+        accessible = get_user_accessible_trips(user, db)
+        if accessible:
+            trip_id = accessible[0].id
+        else:
+            raise HTTPException(status_code=400, detail="No active trip found. Please create a trip first.")
+
     check_trip_access(trip_id, user, db, require_edit=True)
     seg = scout_engine.add_city(
         db=db,
@@ -905,7 +930,7 @@ async def add_city(trip_id: str, payload: AddCityPayload, request: Request, db: 
         hotel_name=payload.hotel_name,
         hotel_address=payload.hotel_address
     )
-    return {"status": "created", "city_id": seg.id, "city_name": seg.city_name}
+    return {"status": "created", "city_id": seg.id, "city_name": seg.city_name, "trip_id": trip_id}
 
 @app.put("/api/trips/{trip_id}/cities/{city_id}")
 async def update_city(trip_id: str, city_id: str, payload: UpdateCityPayload, request: Request, db: Session = Depends(get_db)):

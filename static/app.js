@@ -413,7 +413,10 @@ async function loadTripsDropdown() {
   const switcher = document.getElementById("tripSwitcherSelect");
   if (!switcher) return;
   try {
-    const res = await fetch("/api/trips");
+    const res = await fetch("/api/trips", {
+      headers: getAuthHeaders(),
+      credentials: "include"
+    });
     const trips = await res.json();
     switcher.innerHTML = trips.map(t => `<option value="${t.id}">${escapeHtml(t.title)} (${t.cities_count} cities)</option>`).join("");
     if (currentTripId) switcher.value = currentTripId;
@@ -817,7 +820,8 @@ function attachCardEventListeners() {
       try {
         await fetch(`/api/trips/${currentTripId}/items/${itemId}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: getAuthHeaders({ "Content-Type": "application/json" }),
+          credentials: "include",
           body: JSON.stringify({ assigned_date: newDate })
         });
         await refreshTrip();
@@ -852,7 +856,8 @@ async function saveCardNote(itemId, noteText) {
   try {
     const res = await fetch(`/api/trips/${currentTripId}/items/${itemId}/note`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
+      credentials: "include",
       body: JSON.stringify({ personal_note: noteText })
     });
     if (res.ok) {
@@ -871,11 +876,16 @@ async function deleteCity(cityId, cityName) {
   if (!confirm(`Are you sure you want to remove ${cityName} and all its stays from your journey?`)) return;
 
   try {
-    const res = await fetch(`/api/trips/${currentTripId}/cities/${cityId}`, { method: "DELETE" });
+    const res = await fetch(`/api/trips/${currentTripId}/cities/${cityId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+      credentials: "include"
+    });
     if (res.ok) {
       await refreshTrip();
     } else {
-      alert("Failed to delete city");
+      const err = await res.json().catch(() => ({}));
+      alert("Failed to delete city: " + (err.detail || res.statusText));
     }
   } catch (err) {
     alert("Error deleting city: " + err.message);
@@ -885,8 +895,17 @@ async function deleteCity(cityId, cityName) {
 async function deleteStay(stayId) {
   if (!confirm("Remove this hotel stay location?")) return;
   try {
-    const res = await fetch(`/api/trips/${currentTripId}/stays/${stayId}`, { method: "DELETE" });
-    if (res.ok) await refreshTrip();
+    const res = await fetch(`/api/trips/${currentTripId}/stays/${stayId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+      credentials: "include"
+    });
+    if (res.ok) {
+      await refreshTrip();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      alert("Failed to delete stay: " + (err.detail || res.statusText));
+    }
   } catch (err) {
     alert("Error deleting stay: " + err.message);
   }
@@ -895,8 +914,17 @@ async function deleteStay(stayId) {
 async function deleteItem(itemId) {
   if (!confirm("Delete this stop from the itinerary?")) return;
   try {
-    const res = await fetch(`/api/trips/${currentTripId}/items/${itemId}`, { method: "DELETE" });
-    if (res.ok) await refreshTrip();
+    const res = await fetch(`/api/trips/${currentTripId}/items/${itemId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+      credentials: "include"
+    });
+    if (res.ok) {
+      await refreshTrip();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      alert("Failed to delete item: " + (err.detail || res.statusText));
+    }
   } catch (err) {
     alert("Error deleting item: " + err.message);
   }
@@ -910,34 +938,68 @@ function initModals() {
   const cancelAddCityBtn = document.getElementById("cancelAddCityBtn");
   const addCityForm = document.getElementById("addCityForm");
 
-  if (openAddCityBtn) openAddCityBtn.addEventListener("click", () => addCityModal.style.display = "flex");
+  if (openAddCityBtn) {
+    openAddCityBtn.addEventListener("click", () => {
+      if (!currentUser) {
+        alert("🔒 Please sign in with your Google or Gmail account before adding destination cities.");
+        if (window.openLogin) window.openLogin();
+        return;
+      }
+      addCityModal.style.display = "flex";
+    });
+  }
   if (closeAddCityBtn) closeAddCityBtn.addEventListener("click", () => addCityModal.style.display = "none");
   if (cancelAddCityBtn) cancelAddCityBtn.addEventListener("click", () => addCityModal.style.display = "none");
 
   if (addCityForm) {
     addCityForm.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (!currentUser) {
+        alert("🔒 Please sign in with your Google or Gmail account before adding destination cities.");
+        if (window.openLogin) window.openLogin();
+        return;
+      }
+
+      const cityName = document.getElementById("newCityName").value.trim();
+      const country = document.getElementById("newCityCountry").value.trim() || "Portugal";
+      const startDate = document.getElementById("newCityStart").value;
+      const endDate = document.getElementById("newCityEnd").value;
+      const hotelName = document.getElementById("newCityHotel").value.trim();
+      const hotelAddress = document.getElementById("newCityAddress").value.trim();
+
+      if (!cityName || !startDate || !endDate) {
+        alert("Please specify the city name, arrival date, and departure date.");
+        return;
+      }
+
       const payload = {
-        city_name: document.getElementById("newCityName").value.trim(),
-        country: document.getElementById("newCityCountry").value.trim(),
-        start_date: document.getElementById("newCityStart").value,
-        end_date: document.getElementById("newCityEnd").value,
-        hotel_name: document.getElementById("newCityHotel").value.trim(),
-        hotel_address: document.getElementById("newCityAddress").value.trim(),
+        city_name: cityName,
+        country: country,
+        start_date: startDate,
+        end_date: endDate,
+        hotel_name: hotelName || `${cityName} Central Hotel`,
+        hotel_address: hotelAddress || `${cityName}, ${country}`,
       };
 
       try {
-        const res = await fetch(`/api/trips/${currentTripId}/cities`, {
+        const targetTripId = currentTripId || "null";
+        const res = await fetch(`/api/trips/${targetTripId}/cities`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: getAuthHeaders({ "Content-Type": "application/json" }),
+          credentials: "include",
           body: JSON.stringify(payload)
         });
+        const data = await res.json().catch(() => ({}));
         if (res.ok) {
           addCityModal.style.display = "none";
           addCityForm.reset();
+          if (data.trip_id && (!currentTripId || currentTripId !== data.trip_id)) {
+            currentTripId = data.trip_id;
+            await loadTripsDropdown();
+          }
           await refreshTrip();
         } else {
-          alert("Failed to add city");
+          alert("Failed to add city: " + (data.detail || res.statusText || "Please check your inputs and try again."));
         }
       } catch (err) {
         alert("Error adding city: " + err.message);
@@ -969,13 +1031,17 @@ function initModals() {
       try {
         const res = await fetch(`/api/trips/${currentTripId}/cities/${cityId}/stays`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: getAuthHeaders({ "Content-Type": "application/json" }),
+          credentials: "include",
           body: JSON.stringify(payload)
         });
         if (res.ok) {
           addStayModal.style.display = "none";
           addStayForm.reset();
           await refreshTrip();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          alert("Failed to add stay: " + (err.detail || res.statusText));
         }
       } catch (err) {
         alert("Error adding stay: " + err.message);
@@ -1005,7 +1071,8 @@ function initModals() {
       try {
         const res = await fetch(`/api/trips/${currentTripId}/collaborators`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: getAuthHeaders({ "Content-Type": "application/json" }),
+          credentials: "include",
           body: JSON.stringify(payload)
         });
         if (res.ok) {
@@ -1013,6 +1080,9 @@ function initModals() {
           inviteForm.reset();
           alert(`Invitation sent to ${payload.email}! They can now view and edit this itinerary.`);
           await refreshTrip();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          alert("Failed to invite collaborator: " + (err.detail || res.statusText));
         }
       } catch (err) {
         alert("Error inviting collaborator: " + err.message);
@@ -1047,7 +1117,8 @@ function initModals() {
       try {
         const res = await fetch(`/api/trips/${currentTripId}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: getAuthHeaders({ "Content-Type": "application/json" }),
+          credentials: "include",
           body: JSON.stringify({ title, description })
         });
         if (res.ok) {
@@ -1055,7 +1126,8 @@ function initModals() {
           await loadTripsDropdown();
           await refreshTrip();
         } else {
-          alert("Failed to update trip details");
+          const err = await res.json().catch(() => ({}));
+          alert("Failed to update trip details: " + (err.detail || res.statusText));
         }
       } catch (err) {
         alert("Error updating trip: " + err.message);
@@ -1086,7 +1158,8 @@ function initModals() {
       try {
         const res = await fetch("/api/trips", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: getAuthHeaders({ "Content-Type": "application/json" }),
+          credentials: "include",
           body: JSON.stringify({
             title,
             first_city_name,
@@ -1104,7 +1177,8 @@ function initModals() {
           await loadTripsDropdown();
           await refreshTrip();
         } else {
-          alert("Failed to create new trip");
+          const err = await res.json().catch(() => ({}));
+          alert("Failed to create new trip: " + (err.detail || res.statusText));
         }
       } catch (err) {
         alert("Error creating trip: " + err.message);
@@ -1521,7 +1595,11 @@ function initScout() {
       dailyBtn.disabled = true;
       dailyBtn.textContent = "⏳ Scanning all trip destination cities...";
       try {
-        const res = await fetch(`/api/trips/${currentTripId}/scan/daily`, { method: "POST" });
+        const res = await fetch(`/api/trips/${currentTripId}/scan/daily`, {
+          method: "POST",
+          headers: getAuthHeaders(),
+          credentials: "include"
+        });
         const data = await res.json();
         dailyBtn.disabled = false;
         dailyBtn.textContent = "⚡ Run Daily Autonomous Scan (All Trip Cities)";
@@ -1564,13 +1642,17 @@ async function addToWishlist(itemObj) {
 
     const res = await fetch(`/api/trips/${currentTripId}/items`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
+      credentials: "include",
       body: JSON.stringify(payload)
     });
 
     if (res.ok) {
       alert(`Added "${itemObj.title}" to your To-Do Wishlist!`);
       await refreshTrip();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      alert("Failed to add to wishlist: " + (err.detail || res.statusText));
     }
   } catch (err) {
     alert("Failed to add to wishlist: " + err.message);
