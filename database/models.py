@@ -21,7 +21,7 @@ class User(Base):
 
     # Relationships
     collaborations = relationship("TripCollaborator", back_populates="user", cascade="all, delete-orphan")
-    items_added = relationship("ItineraryItem", back_populates="added_by")
+    items_added = relationship("ItineraryItem", back_populates="added_by", foreign_keys="ItineraryItem.added_by_user_id")
 
 class Trip(Base):
     __tablename__ = "trips"
@@ -105,7 +105,13 @@ class ItineraryItem(Base):
     assigned_date = Column(String(10), nullable=True)  # "todo" or "YYYY-MM-DD"
     added_by_user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Personal Note on card
+    personal_note = Column(Text, nullable=True)
+    note_by_user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
+    note_updated_at = Column(DateTime, nullable=True)
 
     trip = relationship("Trip", back_populates="items")
     city_segment = relationship("CitySegment", back_populates="items")
-    added_by = relationship("User", back_populates="items_added")
+    added_by = relationship("User", back_populates="items_added", foreign_keys=[added_by_user_id])
+    note_by = relationship("User", foreign_keys=[note_by_user_id])

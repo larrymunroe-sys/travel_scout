@@ -26,6 +26,22 @@ def get_db():
         db.close()
 
 def init_db():
-    """Create all tables defined on Base."""
+    """Create all tables defined on Base and perform safe column migrations."""
     from database import models  # noqa: F401
     Base.metadata.create_all(bind=engine)
+
+    # Lightweight SQLite column migrations
+    try:
+        with engine.connect() as conn:
+            cursor = conn.connection.cursor()
+            cursor.execute("PRAGMA table_info(itinerary_items)")
+            cols = {row[1] for row in cursor.fetchall()}
+            if "personal_note" not in cols:
+                cursor.execute("ALTER TABLE itinerary_items ADD COLUMN personal_note TEXT")
+            if "note_by_user_id" not in cols:
+                cursor.execute("ALTER TABLE itinerary_items ADD COLUMN note_by_user_id VARCHAR(36)")
+            if "note_updated_at" not in cols:
+                cursor.execute("ALTER TABLE itinerary_items ADD COLUMN note_updated_at DATETIME")
+            conn.connection.commit()
+    except Exception as e:
+        print("Schema migration note:", e)

@@ -176,6 +176,9 @@ class UpdateItemPayload(BaseModel):
     city_segment_id: Optional[str] = None
     title: Optional[str] = None
 
+class UpdateNotePayload(BaseModel):
+    personal_note: str
+
 class InviteCollaboratorPayload(BaseModel):
     email: str
     name: Optional[str] = None
@@ -335,11 +338,13 @@ async def get_trip_details(trip_id: str, request: Request, db: Session = Depends
     for c in trip.collaborators:
         u = c.user
         collabs.append({
+            "id": u.id,
             "user_id": u.id,
             "name": u.name,
             "email": u.email,
             "avatar_color": u.avatar_color,
-            "role": c.role
+            "role": c.role,
+            "is_owner": (u.id == trip.owner_id)
         })
 
     # 2. Format Cities & Stays
@@ -409,6 +414,17 @@ async def get_trip_details(trip_id: str, request: Request, db: Session = Depends
             city_name=seg.city_name if seg else "City"
         )
 
+        note_author = None
+        if item.note_by:
+            note_author = {
+                "id": item.note_by.id,
+                "name": item.note_by.name,
+                "email": item.note_by.email,
+                "avatar_color": item.note_by.avatar_color
+            }
+
+        note_date_str = item.note_updated_at.strftime("%b %d, %Y, %I:%M %p") if item.note_updated_at else None
+
         item_dict = {
             "id": item.id,
             "trip_id": item.trip_id,
@@ -429,7 +445,10 @@ async def get_trip_details(trip_id: str, request: Request, db: Session = Depends
             "source_platform": item.source_platform,
             "assigned_date": item.assigned_date,
             "added_by": author_data,
-            "transit": transit_info
+            "transit": transit_info,
+            "personal_note": item.personal_note,
+            "note_author": note_author,
+            "note_date": note_date_str
         }
 
         if not item.assigned_date or item.assigned_date == "todo":
@@ -536,6 +555,17 @@ async def print_itinerary_view(
             city_name=seg.city_name if seg else "City"
         )
 
+        note_author = None
+        if item.note_by:
+            note_author = {
+                "id": item.note_by.id,
+                "name": item.note_by.name,
+                "email": item.note_by.email,
+                "avatar_color": item.note_by.avatar_color
+            }
+
+        note_date_str = item.note_updated_at.strftime("%b %d, %Y, %I:%M %p") if item.note_updated_at else None
+
         item_dict = {
             "id": item.id,
             "title": item.title,
@@ -553,7 +583,10 @@ async def print_itinerary_view(
             "source_platform": item.source_platform,
             "assigned_date": item.assigned_date,
             "added_by": author_data,
-            "transit": transit_info
+            "transit": transit_info,
+            "personal_note": item.personal_note,
+            "note_author": note_author,
+            "note_date": note_date_str
         }
 
         if item.assigned_date in days_map:
@@ -735,6 +768,51 @@ async def update_itinerary_item(
     db.commit()
     return {"status": "updated", "item_id": item.id, "assigned_date": item.assigned_date}
 
+@app.put("/api/trips/{trip_id}/items/{item_id}/note")
+async def update_item_note(
+    trip_id: str,
+    item_id: str,
+    payload: UpdateNotePayload,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Update or remove a personal note on an item, recording author attribution and timestamp."""
+    user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=True)
+    item = db.query(ItineraryItem).filter(ItineraryItem.id == item_id, ItineraryItem.trip_id == trip_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    note_txt = (payload.personal_note or "").strip()
+    if note_txt:
+        item.personal_note = note_txt
+        item.note_by_user_id = user.id
+        item.note_updated_at = datetime.utcnow()
+    else:
+        item.personal_note = None
+        item.note_by_user_id = None
+        item.note_updated_at = None
+
+    db.commit()
+    db.refresh(item)
+
+    note_author = None
+    if item.note_by:
+        note_author = {
+            "id": item.note_by.id,
+            "name": item.note_by.name,
+            "email": item.note_by.email,
+            "avatar_color": item.note_by.avatar_color
+        }
+
+    return {
+        "status": "updated",
+        "item_id": item.id,
+        "personal_note": item.personal_note,
+        "note_author": note_author,
+        "note_date": item.note_updated_at.strftime("%b %d, %Y, %I:%M %p") if item.note_updated_at else None
+    }
+
 @app.delete("/api/trips/{trip_id}/items/{item_id}")
 async def delete_itinerary_item(trip_id: str, item_id: str, request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
@@ -797,6 +875,35 @@ async def invite_collaborator(
             "role": payload.role
         }
     }
+
+@app.delete("/api/trips/{trip_id}/collaborators/{collaborator_user_id}")
+async def remove_collaborator(
+    trip_id: str,
+    collaborator_user_id: str,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Remove an invited contributor from the trip."""
+    current_user = get_current_user(request, db)
+    trip = check_trip_access(trip_id, current_user, db, require_edit=True)
+
+    if trip.owner_id == collaborator_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot remove the trip creator/owner from the trip."
+        )
+
+    collab = db.query(TripCollaborator).filter(
+        TripCollaborator.trip_id == trip_id,
+        TripCollaborator.user_id == collaborator_user_id
+    ).first()
+
+    if not collab:
+        raise HTTPException(status_code=404, detail="Collaborator not found on this itinerary.")
+
+    db.delete(collab)
+    db.commit()
+    return {"status": "collaborator_removed", "user_id": collaborator_user_id}
 
 # ==================== CITY-SCOPED LIVE SEARCH & DAILY SCAN ====================
 

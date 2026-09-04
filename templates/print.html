@@ -279,6 +279,32 @@
       margin: 0.4rem 0;
     }
 
+    /* Personal Note Box in Print */
+    .personal-note-box-print {
+      margin: 0.55rem 0;
+      background: #fefce8;
+      border: 1px solid #fef08a;
+      border-left: 4px solid #ca8a04;
+      border-radius: 4px;
+      padding: 0.5rem 0.8rem;
+      font-size: 0.84rem;
+    }
+
+    .note-print-header {
+      font-size: 0.74rem;
+      font-weight: 700;
+      color: #854d0e;
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.2rem;
+    }
+
+    .note-print-body {
+      color: #713f12;
+      font-style: italic;
+      line-height: 1.45;
+    }
+
     .item-meta-footer {
       display: flex;
       justify-content: space-between;
@@ -467,6 +493,19 @@
           </p>
           {% endif %}
 
+          <!-- Personal Note Box -->
+          {% if item.personal_note %}
+          <div class="personal-note-box-print">
+            <div class="note-print-header">
+              <span>📝 Personal Note &bull; Added by <strong>{{ item.note_author.name if item.note_author else 'Traveler' }}</strong>{% if item.note_author and item.note_author.email %} ({{ item.note_author.email }}){% endif %}</span>
+              <span>{{ item.note_date or '' }}</span>
+            </div>
+            <div class="note-print-body">
+              &ldquo;{{ item.personal_note }}&rdquo;
+            </div>
+          </div>
+          {% endif %}
+
           <div class="item-meta-footer">
             <div>📍 Address: <strong>{{ item.address or 'City Center' }}</strong></div>
             <div style="display:flex; gap:0.6rem;">
@@ -514,6 +553,17 @@
         {% endif %}
         {% if item.description %}
         <p class="item-desc">{{ item.description }}</p>
+        {% endif %}
+        {% if item.personal_note %}
+        <div class="personal-note-box-print">
+          <div class="note-print-header">
+            <span>📝 Personal Note &bull; Added by <strong>{{ item.note_author.name if item.note_author else 'Traveler' }}</strong>{% if item.note_author and item.note_author.email %} ({{ item.note_author.email }}){% endif %}</span>
+            <span>{{ item.note_date or '' }}</span>
+          </div>
+          <div class="note-print-body">
+            &ldquo;{{ item.personal_note }}&rdquo;
+          </div>
+        </div>
         {% endif %}
         <div class="item-meta-footer">
           <div>📍 {{ item.address or 'City Center' }}</div>

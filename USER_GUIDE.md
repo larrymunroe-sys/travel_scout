@@ -189,6 +189,14 @@ Click the **`📅 Collaborative Itinerary`** tab to view and build your day-by-d
 - In the footer of each card, look for the **Author Tag** (e.g., 👤 `LM Larry` or 👤 `SC Sarah`).
 - Hovering over the badge shows the full name and email of the traveler who contributed that venue.
 
+### 📝 Personal Notes on Itinerary Cards
+Every itinerary card allows travelers to attach personal notes, reminders, or insider tips:
+- **Adding a Note:** Click the **`+ Add Personal Note`** button at the bottom of any card.
+- **Editing / Updating:** Click **`✏️ Edit Note`** to revise existing notes.
+- **Deleting:** Click the **`🗑️`** trash button next to the note to clear it.
+- **Author & Date Stamping:** Every personal note automatically records the traveler who created/edited it (e.g., *Larry Munroe*) and the exact date and time (e.g., *Sep 4, 2026, 12:28 AM*).
+- **Printed Output:** All personal notes, along with the author's name, email, and timestamp, are prominently printed on the itinerary PDF/paper outputs and included in email/text shares.
+
 ---
 
 ## 6. Interactive Links & Navigation
@@ -267,6 +275,12 @@ Click the **`🗺️ Interactive Map`** tab for a visual overview of your journe
 3. Click **"Send Invitation"**.
 4. The new collaborator is registered and their avatar circle appears in the header's collaborator stack.
 
+### Managing & Removing Contributors
+You can review and manage existing collaborators anytime in the **`👥 Share & Invite`** modal:
+- Below the invitation form, the **Active Contributors** section lists every co-traveler with their name, email, and role badge (`Owner`, `Editor`, or `Viewer`).
+- **Removing a Contributor:** Click the red **`🗑️ Remove`** button next to any collaborator. Confirm the prompt to revoke their access to this trip.
+- **Trip Owner Protection:** The original trip creator is badged with a gold **`👑 Trip Owner`** tag and cannot be removed, ensuring itineraries always retain their primary administrator.
+
 ---
 
 ## 10. Printing, PDF Export & Email/SMS Sharing
@@ -295,6 +309,7 @@ The export engine lets you customize the exact scope of your output:
   - **Transit & Distance Box:** Exact distance in miles from the date's active hotel base, estimated walking time, recommended transit mode (e.g. *Lisbon Metro / Tram*, *Scenic Walk*, *Metro do Porto*), and route instructions.
   - **Curated Highlight:** Notable quotes, specialty dishes, or architectural distinctions.
   - **Full Description:** Comprehensive overview of what makes the venue worth visiting.
+  - **📝 Personal Note Block:** Any personal note entered by the team, prominently rendered with the author's name, email, and the date/time the note was recorded.
   - **Location & Category:** Neighborhood, full street address, and cost tier.
   - **Team Attribution & Maps:** Contributor avatar attribution and direct Google Maps navigation links.
 

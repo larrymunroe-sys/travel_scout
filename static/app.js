@@ -266,17 +266,83 @@ async function refreshTrip() {
   }
 }
 
-// 4. Render Collaborators Avatar Stack
+// 4. Render Collaborators Avatar Stack & Manage Modal
 function renderCollaborators() {
   const bar = document.getElementById("collaboratorsBar");
   if (!bar || !currentTripData) return;
 
   bar.innerHTML = currentTripData.collaborators.map(c => `
-    <div class="collab-avatar" style="background:${c.avatar_color || '#38bdf8'};" title="${escapeHtml(c.name)} (${escapeHtml(c.email)}) - ${c.role}">
+    <div class="collab-avatar" style="background:${c.avatar_color || '#38bdf8'}; cursor:pointer;" title="${escapeHtml(c.name)} (${escapeHtml(c.email)}) - ${c.role} (Click to manage)" onclick="openCollaboratorsModal()">
       ${c.name.slice(0, 2).toUpperCase()}
     </div>
   `).join("");
+
+  renderModalCollaborators();
 }
+
+function renderModalCollaborators() {
+  const list = document.getElementById("modalCollaboratorsList");
+  if (!list || !currentTripData) return;
+
+  if (currentTripData.collaborators.length === 0) {
+    list.innerHTML = `<p style="font-size:0.8rem; color:var(--text-muted);">No contributors on this trip yet.</p>`;
+    return;
+  }
+
+  list.innerHTML = currentTripData.collaborators.map(c => `
+    <div class="collab-row-item">
+      <div class="collab-row-info">
+        <span class="user-avatar-badge" style="background:${c.avatar_color || '#38bdf8'}; width:28px; height:28px; font-size:0.75rem;">
+          ${c.name.slice(0, 2).toUpperCase()}
+        </span>
+        <div style="display:flex; flex-direction:column;">
+          <div style="display:flex; align-items:center; gap:0.4rem;">
+            <strong style="color:var(--text-main); font-size:0.86rem;">${escapeHtml(c.name)}</strong>
+            <span class="user-role">${c.role}</span>
+          </div>
+          <span style="font-size:0.74rem; color:#94a3b8; font-family:var(--font-mono, monospace);">✉️ ${escapeHtml(c.email)}</span>
+        </div>
+      </div>
+      <div>
+        ${c.is_owner ? `
+          <span style="font-size:0.75rem; color:#fbbf24; font-weight:700; padding:0.2rem 0.5rem; background:rgba(251,191,36,0.1); border-radius:4px; border:1px solid rgba(251,191,36,0.25);">👑 Trip Owner</span>
+        ` : `
+          <button type="button" class="btn-remove-collab" onclick="removeCollaborator('${c.user_id || c.id}', '${escapeHtml(c.name)}')">
+            🗑️ Remove
+          </button>
+        `}
+      </div>
+    </div>
+  `).join("");
+}
+
+window.openCollaboratorsModal = function() {
+  const modal = document.getElementById("inviteModal");
+  if (modal) {
+    renderModalCollaborators();
+    modal.style.display = "flex";
+  }
+};
+
+window.removeCollaborator = async function(userId, name) {
+  if (!confirm(`Are you sure you want to remove ${name} from this trip? They will no longer have access.`)) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/trips/${currentTripId}/collaborators/${userId}`, {
+      method: "DELETE"
+    });
+    if (res.ok) {
+      alert(`Removed ${name} from contributors.`);
+      await refreshTrip();
+    } else {
+      const data = await res.json();
+      alert("Failed to remove contributor: " + (data.detail || res.statusText));
+    }
+  } catch (err) {
+    alert("Error removing contributor: " + err.message);
+  }
+};
 
 // 5. Render Cities & Stays Manager Tab
 function renderCitiesTab() {
@@ -458,6 +524,27 @@ function renderCard(item, availableDates) {
         </a>
       </div>
 
+      <!-- Personal Note Section -->
+      <div class="card-note-box" id="note-box-${item.id}">
+        ${item.personal_note ? `
+          <div class="note-content-display">
+            <div class="note-meta-line">
+              <span class="note-author">📝 Note by <strong>${escapeHtml(item.note_author?.name || 'Traveler')}</strong> <span style="font-size:0.7rem; color:#94a3b8;">(${escapeHtml(item.note_author?.email || '')})</span>:</span>
+              <span class="note-date">${escapeHtml(item.note_date || '')}</span>
+            </div>
+            <div class="note-text">&ldquo;${escapeHtml(item.personal_note)}&rdquo;</div>
+            <div style="margin-top:0.35rem; display:flex; gap:0.6rem; align-items:center;">
+              <button type="button" class="btn-note-edit" onclick='editCardNote("${item.id}", ${JSON.stringify(item.personal_note).replace(/'/g, "&apos;")})'>✏️ Edit Note</button>
+              <button type="button" class="btn-note-delete" onclick="deleteCardNote('${item.id}')">🗑️ Remove</button>
+            </div>
+          </div>
+        ` : `
+          <button type="button" class="btn-add-note" onclick="openAddNotePrompt('${item.id}')">
+            📝 + Add Personal Note
+          </button>
+        `}
+      </div>
+
       <div class="card-footer-actions">
         <!-- Author Avatar Tag -->
         <div class="card-author-tag" title="Added by ${escapeHtml(author.name)}">
@@ -499,6 +586,44 @@ function attachCardEventListeners() {
       }
     });
   });
+}
+
+window.openAddNotePrompt = async function(itemId) {
+  const note = prompt("Enter personal note for this stop (e.g. reservation timing, photo spot, dress code):");
+  if (note !== null && note.trim() !== "") {
+    await saveCardNote(itemId, note.trim());
+  }
+};
+
+window.editCardNote = async function(itemId, currentNote) {
+  const note = prompt("Edit your personal note for this stop:", currentNote);
+  if (note !== null) {
+    await saveCardNote(itemId, note.trim());
+  }
+};
+
+window.deleteCardNote = async function(itemId) {
+  if (confirm("Are you sure you want to remove this personal note?")) {
+    await saveCardNote(itemId, "");
+  }
+};
+
+async function saveCardNote(itemId, noteText) {
+  try {
+    const res = await fetch(`/api/trips/${currentTripId}/items/${itemId}/note`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ personal_note: noteText })
+    });
+    if (res.ok) {
+      await refreshTrip();
+    } else {
+      const err = await res.json();
+      alert("Failed to save note: " + (err.detail || res.statusText));
+    }
+  } catch (e) {
+    alert("Error saving note: " + e.message);
+  }
 }
 
 // 7. City Actions (Add & Delete)
@@ -930,6 +1055,7 @@ function generateFormattedItineraryText(mode = "email") {
         lines.push(`${idx + 1}. ${it.title}${tr} - ${it.cost || 'Free'}`);
         if (it.highlight) lines.push(`   "${it.highlight}"`);
         if (it.transit?.best_mode) lines.push(`   Transit: ${it.transit.best_mode}`);
+        if (it.personal_note) lines.push(`   📝 Note: "${it.personal_note}"`);
       });
       lines.push("");
     });
@@ -938,6 +1064,7 @@ function generateFormattedItineraryText(mode = "email") {
       lines.push(`📋 TO-DO WISHLIST:`);
       currentTripData.itinerary.todo.slice(0, 5).forEach((it, i) => {
         lines.push(`• ${it.title} (${it.city_name || ''})`);
+        if (it.personal_note) lines.push(`   📝 Note: "${it.personal_note}"`);
       });
     }
 
@@ -994,6 +1121,9 @@ function generateFormattedItineraryText(mode = "email") {
       if (it.url) lines.push(`• Web: ${it.url}`);
       lines.push(`• Maps: https://www.google.com/maps/search/?api=1&query=${it.lat},${it.lon}`);
       lines.push(`• Added by: ${it.added_by?.name || 'Traveler'}`);
+      if (it.personal_note) {
+        lines.push(`• 📝 Personal Note: "${it.personal_note}" (added by ${it.note_author?.name || 'Traveler'} on ${it.note_date || ''})`);
+      }
     });
     lines.push("");
   });
@@ -1007,6 +1137,7 @@ function generateFormattedItineraryText(mode = "email") {
       lines.push(`\n${idx + 1}. ${it.title} (${it.city_name || ''}) - ${it.cost || 'Free'}`);
       if (it.address) lines.push(`   Address: ${it.address}`);
       if (it.highlight) lines.push(`   "${it.highlight}"`);
+      if (it.personal_note) lines.push(`   📝 Personal Note: "${it.personal_note}" (added by ${it.note_author?.name || 'Traveler'} on ${it.note_date || ''})`);
       if (it.url) lines.push(`   Link: ${it.url}`);
     });
     lines.push("");

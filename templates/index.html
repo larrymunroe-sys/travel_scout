@@ -337,37 +337,55 @@
     </div>
   </div>
 
-  <!-- MODAL 3: INVITE COLLABORATOR -->
+  <!-- MODAL 3: COLLABORATORS & INVITE -->
   <div class="modal-overlay" id="inviteModal" style="display:none;">
-    <div class="modal-card">
+    <div class="modal-card" style="max-width:560px;">
       <div class="modal-header">
-        <h3>👥 Share Itinerary & Invite Collaborator</h3>
+        <h3>👥 Trip Contributors &amp; Collaborators</h3>
         <button class="modal-close" id="closeInviteModalBtn">&times;</button>
       </div>
-      <form id="inviteForm">
-        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
-          Invite friends or travel companions by Gmail. Anyone invited can add wishlist items, assign dates, and co-plan simultaneously!
-        </p>
-        <div class="form-group">
-          <label>Gmail / Email Address</label>
-          <input type="email" id="inviteEmail" placeholder="partner@gmail.com" required />
+
+      <div style="padding:0.5rem 0; display:flex; flex-direction:column; gap:1.2rem;">
+        
+        <!-- Active Contributors List with Remove Buttons -->
+        <div>
+          <label style="font-size:0.8rem; font-weight:700; color:var(--text-main); text-transform:uppercase; letter-spacing:0.05em; display:block; margin-bottom:0.6rem;">
+            Active Contributors on this Itinerary:
+          </label>
+          <div id="modalCollaboratorsList" style="display:flex; flex-direction:column; gap:0.5rem; max-height:220px; overflow-y:auto;">
+            <!-- Injected via JavaScript -->
+          </div>
         </div>
-        <div class="form-group">
-          <label>Name</label>
-          <input type="text" id="inviteName" placeholder="e.g. Sarah Chen" />
+
+        <div style="display:flex; align-items:center; gap:0.8rem; margin:0.2rem 0;">
+          <div style="flex:1; height:1px; background:var(--border);"></div>
+          <span style="font-size:0.72rem; color:var(--text-muted); text-transform:uppercase;">or invite new contributor</span>
+          <div style="flex:1; height:1px; background:var(--border);"></div>
         </div>
-        <div class="form-group">
-          <label>Role</label>
-          <select id="inviteRole">
-            <option value="editor">Editor (Can add & edit stops)</option>
-            <option value="viewer">Viewer (Read-only)</option>
-          </select>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" id="cancelInviteBtn">Cancel</button>
-          <button type="submit" class="btn btn-primary">Send Invite & Add</button>
-        </div>
-      </form>
+
+        <form id="inviteForm" style="display:flex; flex-direction:column; gap:0.8rem;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Gmail / Email Address</label>
+            <input type="email" id="inviteEmail" placeholder="partner@gmail.com" required />
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Name (Optional)</label>
+            <input type="text" id="inviteName" placeholder="e.g. Sarah Chen" />
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Role</label>
+            <select id="inviteRole">
+              <option value="editor">Editor (Can add & edit stops, notes)</option>
+              <option value="viewer">Viewer (Read-only)</option>
+            </select>
+          </div>
+          <div class="modal-actions" style="margin-top:0.4rem;">
+            <button type="button" class="btn btn-secondary" id="cancelInviteBtn">Cancel</button>
+            <button type="submit" class="btn btn-primary">Send Invite &amp; Add</button>
+          </div>
+        </form>
+
+      </div>
     </div>
   </div>
 
