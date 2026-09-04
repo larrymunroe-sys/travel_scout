@@ -441,14 +441,12 @@ async function loadTripsDropdown() {
 
 async function loadInitialTrip() {
   try {
-    const localUserId = localStorage.getItem("travel_scout_user_id");
-    const headers = {};
-    if (localUserId) headers["x-travel-scout-user-id"] = localUserId;
-
-    const res = await fetch("/api/trips", { headers, credentials: "include" });
+    const res = await fetch("/api/trips", { headers: getAuthHeaders(), credentials: "include" });
     const trips = await res.json();
     if (trips.length > 0) {
-      currentTripId = trips[0].id;
+      if (!currentTripId || !trips.find(t => t.id === currentTripId)) {
+        currentTripId = trips[0].id;
+      }
       await loadTripsDropdown();
       await refreshTrip();
     } else {
@@ -480,6 +478,22 @@ async function loadInitialTrip() {
       if (todoGrid) todoGrid.innerHTML = `<p style="grid-column:1/-1; color:var(--text-muted); text-align:center; padding:2rem;">${!currentUser ? 'Please sign in with Gmail to view the To-Do list.' : 'No items yet. Create a trip to start planning.'}</p>`;
       const daysContainer = document.getElementById("daysContainer");
       if (daysContainer) daysContainer.innerHTML = "";
+
+      const exploreCardsGrid = document.getElementById("exploreCardsGrid");
+      if (exploreCardsGrid) {
+        exploreCardsGrid.innerHTML = `
+          <div style="grid-column: 1/-1; text-align: center; padding: 3.5rem 1.5rem; color: var(--text-muted); background: var(--bg-card); border-radius: var(--radius-md); border: 1px dashed var(--border);">
+            <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">🎒</div>
+            <h3 style="color: var(--text-main); margin-bottom: 0.4rem;">No Active Itinerary</h3>
+            <p style="font-size: 0.88rem; margin-bottom: 1.2rem;">You do not have any trips saved right now. Click "➕ New Trip" in the header to start a new adventure!</p>
+            <button class="btn btn-primary" onclick="document.getElementById('createTripModal').style.display='flex'">➕ Start a New Trip</button>
+          </div>
+        `;
+      }
+      const exploreCount = document.getElementById("exploreItemCount");
+      if (exploreCount) exploreCount.textContent = "0";
+      const collabsBar = document.getElementById("collaboratorsBar");
+      if (collabsBar) collabsBar.innerHTML = "";
     }
   } catch (err) {
     console.error("Failed to load initial trip:", err);
@@ -1637,12 +1651,8 @@ function initModals() {
           const data = await res.json();
           editTripModal.style.display = "none";
           alert(`"${tripTitle}" has been permanently deleted.`);
-          if (data.next_trip_id) {
-            currentTripId = data.next_trip_id;
-          } else {
-            currentTripId = null;
-          }
-          await loadInitialTrip();
+          currentTripId = data.next_trip_id || null;
+          window.location.reload();
         } else {
           const err = await res.json().catch(() => ({}));
           alert("Failed to delete trip: " + (err.detail || res.statusText));

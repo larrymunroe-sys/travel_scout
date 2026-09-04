@@ -70,7 +70,7 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
         )
     return user
 
-def get_user_accessible_trips(user: User, db: Session) -> List[Trip]:
+def get_user_accessible_trips(user: User, db: Session, auto_create: bool = False) -> List[Trip]:
     """Retrieve only trips owned by or explicitly shared with the current user."""
     collab_trip_ids = [
         c.trip_id for c in db.query(TripCollaborator.trip_id).filter(TripCollaborator.user_id == user.id).all()
@@ -82,7 +82,7 @@ def get_user_accessible_trips(user: User, db: Session) -> List[Trip]:
         )
     ).all()
 
-    if not trips:
+    if not trips and auto_create:
         # Auto-create starter itinerary for this user so they can immediately plan and add cities
         first_name = user.name.split()[0] if user.name else "My"
         starter_trip = Trip(
@@ -643,8 +643,8 @@ async def delete_trip(trip_id: str, request: Request, db: Session = Depends(get_
     db.delete(trip)
     db.commit()
 
-    # Find remaining accessible trips for this user (or auto-provision if none)
-    remaining = get_user_accessible_trips(user, db)
+    # Find remaining accessible trips for this user (do not auto-create if user deleted all trips)
+    remaining = get_user_accessible_trips(user, db, auto_create=False)
 
     return {
         "status": "deleted",
@@ -1046,9 +1046,19 @@ async def delete_city(trip_id: str, city_id: str, request: Request, db: Session 
     """Delete a destination city and cascade clean its stays and assigned items."""
     user = get_current_user(request, db)
     check_trip_access(trip_id, user, db, require_edit=True)
+
+    # 1. Clean up all itinerary items associated with this city
+    db.query(ItineraryItem).filter(ItineraryItem.city_segment_id == city_id).delete()
+
+    # 2. Clean up all stays associated with this city
+    db.query(StayLocation).filter(StayLocation.city_segment_id == city_id).delete()
+
+    # 3. Delete city segment itself
     success = scout_engine.delete_city(db, trip_id, city_id)
     if not success:
         raise HTTPException(status_code=404, detail="City not found")
+
+    db.commit()
     return {"status": "deleted", "city_id": city_id}
 
 # ==================== STAY / HOTEL CRUD ====================
