@@ -43,8 +43,11 @@ with SessionLocal() as _db:
 # ==================== AUTHENTICATION HELPER ====================
 
 def get_optional_current_user(request: Request, db: Session = Depends(get_db)) -> Optional[User]:
-    """Retrieve user from session cookie. Returns None if explicitly logged out or no valid user found."""
+    """Retrieve user from session cookie or header. Returns None if explicitly logged out or no valid user found."""
     user_id = request.cookies.get("travel_scout_user_id")
+    if not user_id:
+        user_id = request.headers.get("x-travel-scout-user-id")
+
     if user_id == "logged_out":
         return None
 
@@ -52,12 +55,12 @@ def get_optional_current_user(request: Request, db: Session = Depends(get_db)) -
         user = db.query(User).filter(User.id == user_id).first()
         if user:
             return user
-    
+
     # Default to Larry Munroe if no cookie on first visit
     default_user = db.query(User).filter(User.email == "larrymunroe@gmail.com").first()
     if default_user:
         return default_user
-    
+
     return db.query(User).first()
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
@@ -215,7 +218,7 @@ async def serve_index(request: Request, db: Session = Depends(get_db)):
 # ==================== AUTH ROUTES ====================
 
 @app.post("/auth/dev-login")
-async def dev_login(payload: DevLoginPayload, response: Response, db: Session = Depends(get_db)):
+async def dev_login(payload: DevLoginPayload, request: Request, response: Response, db: Session = Depends(get_db)):
     """One-click instant login/switching for multi-user collaboration testing."""
     user = db.query(User).filter(User.email == payload.email).first()
     if not user:
@@ -228,7 +231,16 @@ async def dev_login(payload: DevLoginPayload, response: Response, db: Session = 
         db.commit()
         db.refresh(user)
 
-    response.set_cookie(key="travel_scout_user_id", value=user.id, max_age=86400 * 30, httponly=False)
+    is_https = request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https"
+    response.set_cookie(
+        key="travel_scout_user_id",
+        value=user.id,
+        max_age=86400 * 30,
+        httponly=False,
+        path="/",
+        samesite="lax",
+        secure=is_https
+    )
     return {
         "status": "success",
         "user": {
@@ -257,8 +269,17 @@ async def get_me(request: Request, db: Session = Depends(get_db)):
     }
 
 @app.post("/auth/logout")
-async def logout(response: Response):
-    response.set_cookie(key="travel_scout_user_id", value="logged_out", max_age=86400 * 30, httponly=False)
+async def logout(request: Request, response: Response):
+    is_https = request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https"
+    response.set_cookie(
+        key="travel_scout_user_id",
+        value="logged_out",
+        max_age=86400 * 30,
+        httponly=False,
+        path="/",
+        samesite="lax",
+        secure=is_https
+    )
     return {"status": "logged_out"}
 
 # ==================== TRIP & CITY API ROUTES ====================

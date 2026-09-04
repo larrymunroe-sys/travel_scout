@@ -44,7 +44,13 @@ function initTabs() {
 // 2. Auth & User Switcher
 async function loadCurrentUser() {
   try {
-    const res = await fetch("/auth/me");
+    const localUserId = localStorage.getItem("travel_scout_user_id");
+    const headers = {};
+    if (localUserId) {
+      headers["x-travel-scout-user-id"] = localUserId;
+    }
+
+    const res = await fetch("/auth/me", { headers, credentials: "include" });
     const data = await res.json();
     currentUser = data.current_user;
 
@@ -103,21 +109,42 @@ async function loadCurrentUser() {
     function closeLogin() {
       if (loginModal) loginModal.style.display = "none";
     }
+    window.openLogin = openLogin;
+    window.closeLogin = closeLogin;
 
     if (headerSignInBtn) headerSignInBtn.onclick = openLogin;
     if (bannerSignInBtn) bannerSignInBtn.onclick = openLogin;
     if (closeLoginModalBtn) closeLoginModalBtn.onclick = closeLogin;
 
-    // Quick pick buttons in login modal
-    document.querySelectorAll(".quick-login-btn").forEach(btn => {
-      btn.onclick = async () => {
-        const email = btn.dataset.email;
-        const name = btn.dataset.name;
-        if (email && name) {
-          await loginAs(email, name);
-        }
-      };
-    });
+    // Dynamically populate and attach Quick Pick list
+    const quickPickContainer = document.getElementById("loginQuickPickList");
+    const availUsers = data.available_users || [];
+    if (quickPickContainer && availUsers.length > 0) {
+      quickPickContainer.innerHTML = availUsers.map(u => `
+        <button type="button" class="btn btn-secondary quick-login-btn" data-email="${escapeHtml(u.email)}" data-name="${escapeHtml(u.name)}" style="justify-content:flex-start; padding:0.6rem 0.9rem; width:100%; text-align:left; border-color:rgba(255,255,255,0.08);">
+          <span class="user-avatar-badge" style="background:${u.avatar_color || '#38bdf8'}; width:28px; height:28px; font-size:0.75rem; margin-right:0.75rem; flex-shrink:0;">
+            ${escapeHtml(u.name.slice(0, 2).toUpperCase())}
+          </span>
+          <div style="display:flex; flex-direction:column; flex:1;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <strong style="color:var(--text-main); font-size:0.86rem;">${escapeHtml(u.name)}</strong>
+              <span style="font-size:0.7rem; color:#38bdf8; font-weight:600;">Sign In &rarr;</span>
+            </div>
+            <span style="font-size:0.75rem; color:#94a3b8; font-family:var(--font-mono, monospace);">✉️ ${escapeHtml(u.email)}</span>
+          </div>
+        </button>
+      `).join("");
+
+      quickPickContainer.querySelectorAll(".quick-login-btn").forEach(btn => {
+        btn.onclick = async () => {
+          const email = btn.dataset.email;
+          const name = btn.dataset.name;
+          if (email && name) {
+            await loginAs(email, name);
+          }
+        };
+      });
+    }
 
     // Custom login form
     const customLoginForm = document.getElementById("customLoginForm");
@@ -135,13 +162,20 @@ async function loadCurrentUser() {
     // Switcher dropdown
     const switcher = document.getElementById("userSwitcherSelect");
     if (switcher) {
+      if (availUsers.length > 0) {
+        switcher.innerHTML = `
+          <option value="" disabled selected>Switch Account...</option>
+          ${availUsers.map(u => `<option value="${escapeHtml(u.email)}" ${currentUser && u.id === currentUser.id ? 'selected' : ''}>${escapeHtml(u.name)} (${escapeHtml(u.email)})</option>`).join("")}
+          <option value="new">+ Add New Collaborator Account</option>
+        `;
+      }
       switcher.addEventListener("change", async (e) => {
         const val = e.target.value;
         if (val === "new") {
           openLogin();
           switcher.value = "";
         } else if (val) {
-          const userObj = data.available_users.find(u => u.email === val);
+          const userObj = availUsers.find(u => u.email === val);
           if (userObj) {
             await loginAs(userObj.email, userObj.name);
           }
@@ -155,11 +189,21 @@ async function loadCurrentUser() {
 
 async function loginAs(email, name) {
   try {
-    await fetch("/auth/dev-login", {
+    const res = await fetch("/auth/dev-login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ email, name })
     });
+    if (!res.ok) {
+      const err = await res.json();
+      alert("Login failed: " + (err.detail || JSON.stringify(err)));
+      return;
+    }
+    const data = await res.json();
+    if (data.user && data.user.id) {
+      localStorage.setItem("travel_scout_user_id", data.user.id);
+    }
     window.location.reload();
   } catch (err) {
     alert("Login failed: " + err.message);
@@ -168,10 +212,12 @@ async function loginAs(email, name) {
 
 async function logoff() {
   try {
-    await fetch("/auth/logout", { method: "POST" });
+    localStorage.removeItem("travel_scout_user_id");
+    await fetch("/auth/logout", { method: "POST", credentials: "include" });
     window.location.reload();
   } catch (err) {
     console.error("Logout error:", err);
+    localStorage.removeItem("travel_scout_user_id");
     window.location.reload();
   }
 }
@@ -196,7 +242,11 @@ async function loadTripsDropdown() {
 
 async function loadInitialTrip() {
   try {
-    const res = await fetch("/api/trips");
+    const localUserId = localStorage.getItem("travel_scout_user_id");
+    const headers = {};
+    if (localUserId) headers["x-travel-scout-user-id"] = localUserId;
+
+    const res = await fetch("/api/trips", { headers, credentials: "include" });
     const trips = await res.json();
     if (trips.length > 0) {
       currentTripId = trips[0].id;
@@ -220,7 +270,7 @@ async function loadInitialTrip() {
             <div style="grid-column:1/-1; text-align:center; padding:3.5rem 1.5rem; background:rgba(255,255,255,0.02); border:1px dashed var(--border); border-radius:8px;">
               <h3 style="color:#fca5a5; font-size:1.1rem; margin-bottom:0.4rem;">🔒 Signed Out</h3>
               <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:1.2rem;">Please sign in with your Gmail account to view, customize, or collaborate on multi-city itineraries.</p>
-              <button class="btn btn-primary" onclick="document.getElementById('loginModal').style.display='flex'">🔑 Sign In with Gmail</button>
+              <button class="btn btn-primary" onclick="window.openLogin ? window.openLogin() : document.getElementById('loginModal').style.display='flex'">🔑 Sign In with Gmail</button>
             </div>
           `;
         } else {
@@ -240,7 +290,11 @@ async function loadInitialTrip() {
 async function refreshTrip() {
   if (!currentTripId) return;
   try {
-    const res = await fetch(`/api/trips/${currentTripId}`);
+    const localUserId = localStorage.getItem("travel_scout_user_id");
+    const headers = {};
+    if (localUserId) headers["x-travel-scout-user-id"] = localUserId;
+
+    const res = await fetch(`/api/trips/${currentTripId}`, { headers, credentials: "include" });
     currentTripData = await res.json();
 
     if (currentTripData.trip) {

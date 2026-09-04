@@ -71,7 +71,7 @@
           <button id="logoffBtn" class="btn-logoff" title="Log off active account" style="{% if not current_user %}display:none;{% endif %}">
             🚪 Log Off
           </button>
-          <button id="headerSignInBtn" class="btn btn-primary btn-sm" title="Sign in with your Gmail account" style="padding:0.25rem 0.65rem; font-size:0.75rem; {% if current_user %}display:none;{% endif %}">
+          <button id="headerSignInBtn" class="btn btn-primary btn-sm" title="Sign in with your Gmail account" style="padding:0.25rem 0.65rem; font-size:0.75rem; {% if current_user %}display:none;{% endif %}" onclick="window.openLogin ? window.openLogin() : (document.getElementById('loginModal').style.display='flex')">
             🔑 Sign In
           </button>
         </div>
@@ -100,7 +100,7 @@
           You are viewing Travel Scout in guest mode. Sign in with your Gmail account to access, customize, or collaborate on your itineraries.
         </p>
       </div>
-      <button id="bannerSignInBtn" class="btn btn-primary" style="padding: 0.55rem 1.1rem; font-size: 0.85rem;">
+      <button id="bannerSignInBtn" class="btn btn-primary" style="padding: 0.55rem 1.1rem; font-size: 0.85rem;" onclick="window.openLogin ? window.openLogin() : (document.getElementById('loginModal').style.display='flex')">
         🔑 Sign In with Gmail
       </button>
     </div>
