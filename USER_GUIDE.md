@@ -63,6 +63,17 @@ To simulate collaborative planning with companions or switch to another traveler
 2. Enter the new traveler's name (e.g., *Alex Rivera*) and email (e.g., *alex@gmail.com*).
 3. The platform creates the account, assigns a unique avatar color, and logs in as that user.
 
+### 🔒 Independent User Isolation & Privacy Access Control
+Travel Scout enforces strict privacy and data isolation across all accounts:
+- **Independent Itinerary Isolation:** Each user has their own private workspace. When you create an itinerary, you are marked as the **Owner**.
+- **Invisible to Non-Collaborators:** Other users cannot see your itinerary in their trip list, switch to it, or access it.
+- **Strict 403 Forbidden Protection:** If an unauthorized user attempts to view, edit, or fetch coordinates for another user's private itinerary (even if they know the UUID), the server responds with `HTTP 403 Forbidden: Access denied. This itinerary is private to its creator and invited collaborators.`
+- **Shared Itineraries:** An itinerary is ONLY visible to someone else if the Owner explicitly invites them using **`👥 Share & Invite`**.
+- **Role-Based Permissions:**
+  - **Owner:** Full control over title, description, cities, stays, items, and collaborators.
+  - **Editor:** Can add/edit/delete cities, hotels, and itinerary stops.
+  - **Viewer:** Read-only access to view the unified schedule and map without editing rights.
+
 ---
 
 ## 3. Trip Management (Create, Edit, Switch)
