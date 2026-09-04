@@ -120,6 +120,19 @@ async function loadInitialTrip() {
       currentTripId = trips[0].id;
       await loadTripsDropdown();
       await refreshTrip();
+    } else {
+      currentTripId = null;
+      currentTripData = null;
+      const switcher = document.getElementById("tripSwitcherSelect");
+      if (switcher) switcher.innerHTML = `<option value="">No Itineraries</option>`;
+      const sub = document.getElementById("tripSubtitle");
+      if (sub) sub.textContent = "No private itineraries found. Click '➕ New Trip' to start your first journey!";
+      const citiesList = document.getElementById("citiesList");
+      if (citiesList) citiesList.innerHTML = `<p style="color:var(--text-muted); text-align:center; padding:3rem;">You have no active trips. Click "➕ New Trip" in the header to create your first journey or ask a companion to share theirs with you!</p>`;
+      const todoGrid = document.getElementById("todoGrid");
+      if (todoGrid) todoGrid.innerHTML = `<p style="grid-column:1/-1; color:var(--text-muted); text-align:center; padding:2rem;">No items yet. Create a trip to start planning.</p>`;
+      const daysContainer = document.getElementById("daysContainer");
+      if (daysContainer) daysContainer.innerHTML = "";
     }
   } catch (err) {
     console.error("Failed to load initial trip:", err);

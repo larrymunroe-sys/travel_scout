@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from database.connection import init_db, get_db, SessionLocal
@@ -59,6 +60,47 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
         return first
     
     raise HTTPException(status_code=401, detail="No users found. Please log in.")
+
+def get_user_accessible_trips(user: User, db: Session) -> List[Trip]:
+    """Retrieve only trips owned by or explicitly shared with the current user."""
+    collab_trip_ids = [
+        c.trip_id for c in db.query(TripCollaborator.trip_id).filter(TripCollaborator.user_id == user.id).all()
+    ]
+    trips = db.query(Trip).filter(
+        or_(
+            Trip.owner_id == user.id,
+            Trip.id.in_(collab_trip_ids)
+        )
+    ).all()
+    return trips
+
+def check_trip_access(trip_id: str, user: User, db: Session, require_edit: bool = False) -> Trip:
+    """Verify that the user is authorized to view or edit this private itinerary."""
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    if trip.owner_id == user.id:
+        return trip
+
+    collab = db.query(TripCollaborator).filter(
+        TripCollaborator.trip_id == trip.id,
+        TripCollaborator.user_id == user.id
+    ).first()
+
+    if not collab:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. This itinerary is private to its creator and invited collaborators."
+        )
+
+    if require_edit and collab.role == "viewer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Read-only access. You have viewer permissions on this itinerary."
+        )
+
+    return trip
 
 # ==================== SCHEMAS ====================
 
@@ -141,7 +183,8 @@ class SearchPayload(BaseModel):
 @app.get("/", response_class=HTMLResponse)
 async def serve_index(request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
-    trip = db.query(Trip).first()
+    accessible_trips = get_user_accessible_trips(user, db)
+    trip = accessible_trips[0] if accessible_trips else None
     all_users = db.query(User).all()
 
     return templates.TemplateResponse(
@@ -209,14 +252,17 @@ async def logout(response: Response):
 # ==================== TRIP & CITY API ROUTES ====================
 
 @app.get("/api/trips")
-async def list_trips(db: Session = Depends(get_db)):
-    trips = db.query(Trip).all()
+async def list_trips(request: Request, db: Session = Depends(get_db)):
+    """List only itineraries owned by or shared with the logged-in user."""
+    user = get_current_user(request, db)
+    trips = get_user_accessible_trips(user, db)
     return [
         {
             "id": t.id,
             "title": t.title,
             "description": t.description,
             "owner_id": t.owner_id,
+            "is_owner": (t.owner_id == user.id),
             "cities_count": len(t.city_segments),
             "collaborators_count": len(t.collaborators)
         }
@@ -255,11 +301,10 @@ async def create_trip(payload: CreateTripPayload, request: Request, db: Session 
     return {"status": "created", "trip_id": trip.id, "title": trip.title}
 
 @app.put("/api/trips/{trip_id}")
-async def update_trip(trip_id: str, payload: UpdateTripPayload, db: Session = Depends(get_db)):
-    """Update trip title and description."""
-    trip = db.query(Trip).filter(Trip.id == trip_id).first()
-    if not trip:
-        raise HTTPException(status_code=404, detail="Trip not found")
+async def update_trip(trip_id: str, payload: UpdateTripPayload, request: Request, db: Session = Depends(get_db)):
+    """Update trip title and description (requires owner or editor permissions)."""
+    user = get_current_user(request, db)
+    trip = check_trip_access(trip_id, user, db, require_edit=True)
 
     if payload.title:
         trip.title = payload.title
@@ -270,10 +315,9 @@ async def update_trip(trip_id: str, payload: UpdateTripPayload, db: Session = De
     return {"status": "updated", "trip_id": trip.id, "title": trip.title}
 
 @app.get("/api/trips/{trip_id}")
-async def get_trip_details(trip_id: str, db: Session = Depends(get_db)):
-    trip = db.query(Trip).filter(Trip.id == trip_id).first()
-    if not trip:
-        raise HTTPException(status_code=404, detail="Trip not found")
+async def get_trip_details(trip_id: str, request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    trip = check_trip_access(trip_id, user, db, require_edit=False)
 
     # 1. Format Collaborators
     collabs = []
@@ -411,8 +455,10 @@ async def get_trip_details(trip_id: str, db: Session = Depends(get_db)):
 # ==================== CITY CRUD ====================
 
 @app.post("/api/trips/{trip_id}/cities")
-async def add_city(trip_id: str, payload: AddCityPayload, db: Session = Depends(get_db)):
+async def add_city(trip_id: str, payload: AddCityPayload, request: Request, db: Session = Depends(get_db)):
     """Add a new destination city with starting accommodation."""
+    user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=True)
     seg = scout_engine.add_city(
         db=db,
         trip_id=trip_id,
@@ -426,7 +472,9 @@ async def add_city(trip_id: str, payload: AddCityPayload, db: Session = Depends(
     return {"status": "created", "city_id": seg.id, "city_name": seg.city_name}
 
 @app.put("/api/trips/{trip_id}/cities/{city_id}")
-async def update_city(trip_id: str, city_id: str, payload: UpdateCityPayload, db: Session = Depends(get_db)):
+async def update_city(trip_id: str, city_id: str, payload: UpdateCityPayload, request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=True)
     seg = db.query(CitySegment).filter(CitySegment.id == city_id, CitySegment.trip_id == trip_id).first()
     if not seg:
         raise HTTPException(status_code=404, detail="City not found")
@@ -446,8 +494,10 @@ async def update_city(trip_id: str, city_id: str, payload: UpdateCityPayload, db
     return {"status": "updated", "city_id": seg.id}
 
 @app.delete("/api/trips/{trip_id}/cities/{city_id}")
-async def delete_city(trip_id: str, city_id: str, db: Session = Depends(get_db)):
+async def delete_city(trip_id: str, city_id: str, request: Request, db: Session = Depends(get_db)):
     """Delete a destination city and cascade clean its stays and assigned items."""
+    user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=True)
     success = scout_engine.delete_city(db, trip_id, city_id)
     if not success:
         raise HTTPException(status_code=404, detail="City not found")
@@ -456,8 +506,10 @@ async def delete_city(trip_id: str, city_id: str, db: Session = Depends(get_db))
 # ==================== STAY / HOTEL CRUD ====================
 
 @app.post("/api/trips/{trip_id}/cities/{city_id}/stays")
-async def add_stay(trip_id: str, city_id: str, payload: AddStayPayload, db: Session = Depends(get_db)):
+async def add_stay(trip_id: str, city_id: str, payload: AddStayPayload, request: Request, db: Session = Depends(get_db)):
     """Add an additional stay/hotel by date for moving accommodations midway."""
+    user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=True)
     stay = scout_engine.add_stay(
         db=db,
         city_id=city_id,
@@ -470,7 +522,9 @@ async def add_stay(trip_id: str, city_id: str, payload: AddStayPayload, db: Sess
     return {"status": "created", "stay_id": stay.id, "stay_name": stay.name}
 
 @app.delete("/api/trips/{trip_id}/stays/{stay_id}")
-async def delete_stay(trip_id: str, stay_id: str, db: Session = Depends(get_db)):
+async def delete_stay(trip_id: str, stay_id: str, request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=True)
     success = scout_engine.delete_stay(db, stay_id)
     if not success:
         raise HTTPException(status_code=404, detail="Stay not found")
@@ -486,6 +540,7 @@ async def add_itinerary_item(
     db: Session = Depends(get_db)
 ):
     user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=True)
     item = ItineraryItem(
         trip_id=trip_id,
         city_segment_id=payload.city_segment_id,
@@ -515,8 +570,11 @@ async def update_itinerary_item(
     trip_id: str,
     item_id: str,
     payload: UpdateItemPayload,
+    request: Request,
     db: Session = Depends(get_db)
 ):
+    user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=True)
     item = db.query(ItineraryItem).filter(ItineraryItem.id == item_id, ItineraryItem.trip_id == trip_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -532,7 +590,9 @@ async def update_itinerary_item(
     return {"status": "updated", "item_id": item.id, "assigned_date": item.assigned_date}
 
 @app.delete("/api/trips/{trip_id}/items/{item_id}")
-async def delete_itinerary_item(trip_id: str, item_id: str, db: Session = Depends(get_db)):
+async def delete_itinerary_item(trip_id: str, item_id: str, request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=True)
     item = db.query(ItineraryItem).filter(ItineraryItem.id == item_id, ItineraryItem.trip_id == trip_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -547,9 +607,13 @@ async def delete_itinerary_item(trip_id: str, item_id: str, db: Session = Depend
 async def invite_collaborator(
     trip_id: str,
     payload: InviteCollaboratorPayload,
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """Invite collaborator by Gmail / email address."""
+    current_user = get_current_user(request, db)
+    check_trip_access(trip_id, current_user, db, require_edit=True)
+
     user = db.query(User).filter(User.email == payload.email).first()
     if not user:
         colors = ["#38bdf8", "#e879f9", "#fbbf24", "#34d399", "#f43f5e", "#c084fc"]
@@ -615,16 +679,16 @@ async def trigger_daily_scan(
     db: Session = Depends(get_db)
 ):
     user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=True)
     scan_result = scout_engine.run_multi_city_daily_scan(db, trip_id, user.id)
     return scan_result
 
 # ==================== MAP COORDINATES ENDPOINT ====================
 
 @app.get("/api/trips/{trip_id}/map")
-async def get_map_data(trip_id: str, db: Session = Depends(get_db)):
-    trip = db.query(Trip).filter(Trip.id == trip_id).first()
-    if not trip:
-        raise HTTPException(status_code=404, detail="Trip not found")
+async def get_map_data(trip_id: str, request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    trip = check_trip_access(trip_id, user, db, require_edit=False)
 
     city_points = []
     stay_points = []
