@@ -47,21 +47,37 @@ python main.py scan
 
 Every action on Travel Scout—adding venues, creating trips, or scheduling dates—is tied to an active user profile for transparent team co-planning.
 
-### Default Owner Profile
-- Upon launching, you are logged in as **Larry Munroe (Owner)** with a sky-blue avatar badge in the top right.
+### Logged-In User Display (By Gmail Account)
+- The header prominently displays the currently active traveler profile in the top-right toolbar:
+  - **User Avatar Badge:** Shows the user's initial and unique color badge.
+  - **User Name & Role:** (e.g. `Larry Munroe` &bull; `ACTIVE`).
+  - **Gmail Account Address:** The user's active Google/Gmail address is displayed right below their name (e.g., `✉️ larrymunroe@gmail.com` or `✉️ sarah.chen@gmail.com`) so you always know exactly which account is signed in.
+
+### 🚪 Log Off Button
+- A dedicated **`🚪 Log Off`** button is located directly in the header user profile menu.
+- Clicking **"Log Off"** immediately terminates the current session, deletes user cookies, and places the platform into a secure guest mode.
+- While logged out:
+  - Private itineraries are hidden to preserve traveler confidentiality.
+  - The header displays `Not Logged In` &bull; `✉️ Please sign in`.
+  - A notification banner prompts you to sign in with your Gmail account.
+
+### 🔑 Sign In with Google / Gmail Modal
+- Click **`🔑 Sign In`** in the header or on the dashboard banner to open the sign-in modal anytime.
+- **Quick Team Select:** One-click instant login buttons for team profiles (`Larry Munroe`, `Sarah Chen`, `David Ross`).
+- **Custom Gmail Login:** Enter any custom name and Gmail address to create or sign in to any personal account.
 
 ### One-Click User Switcher
 To simulate collaborative planning with companions or switch to another traveler's view:
 1. Locate the **user profile menu** in the top right corner of the header.
-2. Click the **"Switch User..."** dropdown.
+2. Click the **"Switch Account..."** dropdown.
 3. Select an existing companion:
-   - **Sarah Chen** (Co-Editor, magenta badge)
-   - **David Ross** (Collaborator, amber badge)
-4. The page instantly reloads under that user's identity. Any cards you add will now feature that user's avatar attribution.
+   - **Sarah Chen** (`sarah.chen@gmail.com`, magenta badge)
+   - **David Ross** (`david.ross@gmail.com`, amber badge)
+4. The page instantly reloads under that user's identity. Any cards you add will now feature that user's avatar and name attribution.
 
 ### Adding New Traveler Accounts
-1. In the **"Switch User..."** dropdown, click **`+ Add New Collaborator Account`**.
-2. Enter the new traveler's name (e.g., *Alex Rivera*) and email (e.g., *alex@gmail.com*).
+1. In the **"Switch Account..."** dropdown, select **`+ Add New Collaborator Account`** or use the Sign-In modal.
+2. Enter the new traveler's name (e.g., *Alex Rivera*) and Gmail address (e.g., *alex.rivera@gmail.com*).
 3. The platform creates the account, assigns a unique avatar color, and logs in as that user.
 
 ### 🔒 Independent User Isolation & Privacy Access Control

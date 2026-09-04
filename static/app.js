@@ -50,24 +50,96 @@ async function loadCurrentUser() {
 
     const avatarEl = document.getElementById("currentUserAvatar");
     const nameEl = document.getElementById("currentUserName");
-    if (avatarEl && currentUser) {
-      avatarEl.style.background = currentUser.avatar_color || "#38bdf8";
-      avatarEl.textContent = currentUser.name.slice(0, 2).toUpperCase();
-    }
-    if (nameEl && currentUser) {
-      nameEl.textContent = currentUser.name;
+    const roleEl = document.getElementById("currentUserRole");
+    const emailEl = document.getElementById("currentUserEmail");
+    const logoffBtn = document.getElementById("logoffBtn");
+    const headerSignInBtn = document.getElementById("headerSignInBtn");
+    const bannerSignInBtn = document.getElementById("bannerSignInBtn");
+    const loggedOutBanner = document.getElementById("loggedOutBanner");
+
+    if (currentUser) {
+      if (avatarEl) {
+        avatarEl.style.background = currentUser.avatar_color || "#38bdf8";
+        avatarEl.textContent = currentUser.name.slice(0, 2).toUpperCase();
+      }
+      if (nameEl) nameEl.textContent = currentUser.name;
+      if (roleEl) roleEl.textContent = "Active";
+      if (emailEl) emailEl.textContent = currentUser.email;
+      if (logoffBtn) {
+        logoffBtn.style.display = "inline-flex";
+        logoffBtn.title = `Log off from ${currentUser.email}`;
+      }
+      if (headerSignInBtn) headerSignInBtn.style.display = "none";
+      if (loggedOutBanner) loggedOutBanner.style.display = "none";
+    } else {
+      if (avatarEl) {
+        avatarEl.style.background = "#64748b";
+        avatarEl.textContent = "?";
+      }
+      if (nameEl) nameEl.textContent = "Not Logged In";
+      if (roleEl) roleEl.textContent = "Guest";
+      if (emailEl) emailEl.textContent = "Please sign in";
+      if (logoffBtn) logoffBtn.style.display = "none";
+      if (headerSignInBtn) headerSignInBtn.style.display = "inline-flex";
+      if (loggedOutBanner) loggedOutBanner.style.display = "flex";
     }
 
+    // Logoff button handler
+    if (logoffBtn) {
+      logoffBtn.onclick = async () => {
+        if (confirm(`Log off from ${currentUser ? currentUser.email : 'Travel Scout'}?`)) {
+          await logoff();
+        }
+      };
+    }
+
+    // Sign in modal handlers
+    const loginModal = document.getElementById("loginModal");
+    const closeLoginModalBtn = document.getElementById("closeLoginModalBtn");
+
+    function openLogin() {
+      if (loginModal) loginModal.style.display = "flex";
+    }
+    function closeLogin() {
+      if (loginModal) loginModal.style.display = "none";
+    }
+
+    if (headerSignInBtn) headerSignInBtn.onclick = openLogin;
+    if (bannerSignInBtn) bannerSignInBtn.onclick = openLogin;
+    if (closeLoginModalBtn) closeLoginModalBtn.onclick = closeLogin;
+
+    // Quick pick buttons in login modal
+    document.querySelectorAll(".quick-login-btn").forEach(btn => {
+      btn.onclick = async () => {
+        const email = btn.dataset.email;
+        const name = btn.dataset.name;
+        if (email && name) {
+          await loginAs(email, name);
+        }
+      };
+    });
+
+    // Custom login form
+    const customLoginForm = document.getElementById("customLoginForm");
+    if (customLoginForm) {
+      customLoginForm.onsubmit = async (e) => {
+        e.preventDefault();
+        const name = document.getElementById("customLoginName")?.value.trim();
+        const email = document.getElementById("customLoginEmail")?.value.trim();
+        if (name && email) {
+          await loginAs(email, name);
+        }
+      };
+    }
+
+    // Switcher dropdown
     const switcher = document.getElementById("userSwitcherSelect");
     if (switcher) {
       switcher.addEventListener("change", async (e) => {
         const val = e.target.value;
         if (val === "new") {
-          const name = prompt("Enter new collaborator name (e.g. Alex Rivera):");
-          const email = prompt("Enter collaborator email (e.g. alex@gmail.com):");
-          if (name && email) {
-            await loginAs(email, name);
-          }
+          openLogin();
+          switcher.value = "";
         } else if (val) {
           const userObj = data.available_users.find(u => u.email === val);
           if (userObj) {
@@ -91,6 +163,16 @@ async function loginAs(email, name) {
     window.location.reload();
   } catch (err) {
     alert("Login failed: " + err.message);
+  }
+}
+
+async function logoff() {
+  try {
+    await fetch("/auth/logout", { method: "POST" });
+    window.location.reload();
+  } catch (err) {
+    console.error("Logout error:", err);
+    window.location.reload();
   }
 }
 
@@ -126,11 +208,27 @@ async function loadInitialTrip() {
       const switcher = document.getElementById("tripSwitcherSelect");
       if (switcher) switcher.innerHTML = `<option value="">No Itineraries</option>`;
       const sub = document.getElementById("tripSubtitle");
-      if (sub) sub.textContent = "No private itineraries found. Click '➕ New Trip' to start your first journey!";
+      if (sub) {
+        sub.textContent = !currentUser
+          ? "You are currently logged out. Sign in with your Gmail account to access itineraries."
+          : "No private itineraries found. Click '➕ New Trip' to start your first journey!";
+      }
       const citiesList = document.getElementById("citiesList");
-      if (citiesList) citiesList.innerHTML = `<p style="color:var(--text-muted); text-align:center; padding:3rem;">You have no active trips. Click "➕ New Trip" in the header to create your first journey or ask a companion to share theirs with you!</p>`;
+      if (citiesList) {
+        if (!currentUser) {
+          citiesList.innerHTML = `
+            <div style="grid-column:1/-1; text-align:center; padding:3.5rem 1.5rem; background:rgba(255,255,255,0.02); border:1px dashed var(--border); border-radius:8px;">
+              <h3 style="color:#fca5a5; font-size:1.1rem; margin-bottom:0.4rem;">🔒 Signed Out</h3>
+              <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:1.2rem;">Please sign in with your Gmail account to view, customize, or collaborate on multi-city itineraries.</p>
+              <button class="btn btn-primary" onclick="document.getElementById('loginModal').style.display='flex'">🔑 Sign In with Gmail</button>
+            </div>
+          `;
+        } else {
+          citiesList.innerHTML = `<p style="color:var(--text-muted); text-align:center; padding:3rem;">You have no active trips. Click "➕ New Trip" in the header to create your first journey or ask a companion to share theirs with you!</p>`;
+        }
+      }
       const todoGrid = document.getElementById("todoGrid");
-      if (todoGrid) todoGrid.innerHTML = `<p style="grid-column:1/-1; color:var(--text-muted); text-align:center; padding:2rem;">No items yet. Create a trip to start planning.</p>`;
+      if (todoGrid) todoGrid.innerHTML = `<p style="grid-column:1/-1; color:var(--text-muted); text-align:center; padding:2rem;">${!currentUser ? 'Please sign in with Gmail to view the To-Do list.' : 'No items yet. Create a trip to start planning.'}</p>`;
       const daysContainer = document.getElementById("daysContainer");
       if (daysContainer) daysContainer.innerHTML = "";
     }

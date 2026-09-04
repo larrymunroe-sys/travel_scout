@@ -42,24 +42,33 @@ with SessionLocal() as _db:
 
 # ==================== AUTHENTICATION HELPER ====================
 
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
-    """Retrieve user from session cookie or fallback to first user."""
+def get_optional_current_user(request: Request, db: Session = Depends(get_db)) -> Optional[User]:
+    """Retrieve user from session cookie. Returns None if explicitly logged out or no valid user found."""
     user_id = request.cookies.get("travel_scout_user_id")
+    if user_id == "logged_out":
+        return None
+
     if user_id:
         user = db.query(User).filter(User.id == user_id).first()
         if user:
             return user
     
-    # Default to Larry Munroe if no cookie
+    # Default to Larry Munroe if no cookie on first visit
     default_user = db.query(User).filter(User.email == "larrymunroe@gmail.com").first()
     if default_user:
         return default_user
     
-    first = db.query(User).first()
-    if first:
-        return first
-    
-    raise HTTPException(status_code=401, detail="No users found. Please log in.")
+    return db.query(User).first()
+
+def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
+    """Retrieve user from session cookie or raise 401 if logged out."""
+    user = get_optional_current_user(request, db)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not logged in. Please sign in with your Gmail account."
+        )
+    return user
 
 def get_user_accessible_trips(user: User, db: Session) -> List[Trip]:
     """Retrieve only trips owned by or explicitly shared with the current user."""
@@ -182,8 +191,8 @@ class SearchPayload(BaseModel):
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_index(request: Request, db: Session = Depends(get_db)):
-    user = get_current_user(request, db)
-    accessible_trips = get_user_accessible_trips(user, db)
+    user = get_optional_current_user(request, db)
+    accessible_trips = get_user_accessible_trips(user, db) if user else []
     trip = accessible_trips[0] if accessible_trips else None
     all_users = db.query(User).all()
 
@@ -229,7 +238,7 @@ async def dev_login(payload: DevLoginPayload, response: Response, db: Session = 
 
 @app.get("/auth/me")
 async def get_me(request: Request, db: Session = Depends(get_db)):
-    user = get_current_user(request, db)
+    user = get_optional_current_user(request, db)
     all_users = db.query(User).all()
     return {
         "current_user": {
@@ -237,7 +246,7 @@ async def get_me(request: Request, db: Session = Depends(get_db)):
             "name": user.name,
             "email": user.email,
             "avatar_color": user.avatar_color
-        },
+        } if user else None,
         "available_users": [
             {"id": u.id, "name": u.name, "email": u.email, "avatar_color": u.avatar_color}
             for u in all_users
@@ -246,7 +255,7 @@ async def get_me(request: Request, db: Session = Depends(get_db)):
 
 @app.post("/auth/logout")
 async def logout(response: Response):
-    response.delete_cookie(key="travel_scout_user_id")
+    response.set_cookie(key="travel_scout_user_id", value="logged_out", max_age=86400 * 30, httponly=False)
     return {"status": "logged_out"}
 
 # ==================== TRIP & CITY API ROUTES ====================
@@ -254,7 +263,9 @@ async def logout(response: Response):
 @app.get("/api/trips")
 async def list_trips(request: Request, db: Session = Depends(get_db)):
     """List only itineraries owned by or shared with the logged-in user."""
-    user = get_current_user(request, db)
+    user = get_optional_current_user(request, db)
+    if not user:
+        return []
     trips = get_user_accessible_trips(user, db)
     return [
         {
@@ -582,6 +593,7 @@ async def print_itinerary_view(
             "filter_label": filter_label,
             "date_range_str": date_range_str,
             "now_str": datetime.now().strftime("%B %d, %Y"),
+            "current_user": user,
             "autoprint": autoprint
         }
     )

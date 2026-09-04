@@ -47,21 +47,33 @@
         </button>
 
         <!-- Current User Profile & Switcher -->
-        <div class="user-profile-menu">
-          <div class="user-avatar-badge" id="currentUserAvatar" style="background: {{ current_user.avatar_color }};">
-            {{ current_user.name[:2].upper() }}
+        <div class="user-profile-menu" id="userProfileMenu">
+          <div class="user-avatar-badge" id="currentUserAvatar" style="background: {{ current_user.avatar_color if current_user else '#64748b' }};">
+            {{ current_user.name[:2].upper() if current_user else '?' }}
           </div>
-          <div class="user-meta">
-            <span class="user-name" id="currentUserName">{{ current_user.name }}</span>
-            <span class="user-role">Owner</span>
+          <div class="user-meta" id="currentUserMeta">
+            <div class="user-name-row">
+              <span class="user-name" id="currentUserName">{{ current_user.name if current_user else 'Not Logged In' }}</span>
+              <span class="user-role" id="currentUserRole">{{ 'Active' if current_user else 'Guest' }}</span>
+            </div>
+            <div class="user-email-tag" id="currentUserEmailTag" title="Logged in Google/Gmail Account">
+              <span style="font-size:0.8rem; color:#ea4335;">✉️</span>
+              <span id="currentUserEmail" style="color:#38bdf8; font-weight:600;">{{ current_user.email if current_user else 'Please sign in' }}</span>
+            </div>
           </div>
           <select id="userSwitcherSelect" class="user-switcher" title="Simulate multi-user collaboration by switching accounts">
-            <option value="" disabled selected>Switch User...</option>
+            <option value="" disabled selected>Switch Account...</option>
             {% for u in all_users %}
-            <option value="{{ u.email }}">{{ u.name }} ({{ u.email }})</option>
+            <option value="{{ u.email }}" {% if current_user and u.id == current_user.id %}selected{% endif %}>{{ u.name }} ({{ u.email }})</option>
             {% endfor %}
             <option value="new">+ Add New Collaborator Account</option>
           </select>
+          <button id="logoffBtn" class="btn-logoff" title="Log off active account" style="{% if not current_user %}display:none;{% endif %}">
+            🚪 Log Off
+          </button>
+          <button id="headerSignInBtn" class="btn btn-primary btn-sm" title="Sign in with your Gmail account" style="padding:0.25rem 0.65rem; font-size:0.75rem; {% if current_user %}display:none;{% endif %}">
+            🔑 Sign In
+          </button>
         </div>
       </div>
     </div>
@@ -78,6 +90,22 @@
   </div>
 
   <main class="main-container">
+    {% if not current_user %}
+    <div id="loggedOutBanner" style="background: linear-gradient(135deg, rgba(234,67,53,0.12), rgba(56,189,248,0.08)); border: 1px solid rgba(234,67,53,0.35); border-radius: 8px; padding: 1.1rem 1.5rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+      <div>
+        <h3 style="color: #fca5a5; font-size: 1rem; margin-bottom: 0.2rem; display: flex; align-items: center; gap: 0.4rem;">
+          🔒 Currently Logged Out
+        </h3>
+        <p style="color: var(--text-muted); font-size: 0.84rem; margin: 0;">
+          You are viewing Travel Scout in guest mode. Sign in with your Gmail account to access, customize, or collaborate on your itineraries.
+        </p>
+      </div>
+      <button id="bannerSignInBtn" class="btn btn-primary" style="padding: 0.55rem 1.1rem; font-size: 0.85rem;">
+        🔑 Sign In with Gmail
+      </button>
+    </div>
+    {% endif %}
+
     <!-- TAB 1: CITIES & STAYS MANAGER -->
     <section id="tab-cities" class="tab-content active">
       <div class="section-header">
@@ -578,6 +606,63 @@
 
       <div class="modal-actions" style="margin-top:1rem;">
         <button type="button" class="btn btn-secondary" id="closePrintModalBtn2">Close</button>
+      </div>
+    </div>
+  <!-- MODAL 8: SIGN IN WITH GMAIL -->
+  <div class="modal-overlay" id="loginModal" style="display:none;">
+    <div class="modal-card" style="max-width:540px;">
+      <div class="modal-header">
+        <h3>🔑 Sign In with Google / Gmail</h3>
+        <button class="modal-close" id="closeLoginModalBtn">&times;</button>
+      </div>
+      <div style="padding:0.5rem 0; display:flex; flex-direction:column; gap:1.2rem;">
+        <p style="font-size:0.85rem; color:var(--text-muted); line-height:1.45;">
+          Select an existing traveler profile or sign in with any Gmail address to access your private and collaborative journeys.
+        </p>
+
+        <!-- Quick Switch Buttons -->
+        <div>
+          <label style="font-size:0.8rem; font-weight:700; color:var(--text-main); text-transform:uppercase; letter-spacing:0.05em; display:block; margin-bottom:0.6rem;">
+            ⚡ Quick Sign In to Team Profile:
+          </label>
+          <div style="display:flex; flex-direction:column; gap:0.5rem;" id="loginQuickPickList">
+            {% for u in all_users %}
+            <button type="button" class="btn btn-secondary quick-login-btn" data-email="{{ u.email }}" data-name="{{ u.name }}" style="justify-content:flex-start; padding:0.6rem 0.9rem; width:100%; text-align:left; border-color:rgba(255,255,255,0.08);">
+              <span class="user-avatar-badge" style="background:{{ u.avatar_color }}; width:28px; height:28px; font-size:0.75rem; margin-right:0.75rem; flex-shrink:0;">
+                {{ u.name[:2].upper() }}
+              </span>
+              <div style="display:flex; flex-direction:column; flex:1;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <strong style="color:var(--text-main); font-size:0.86rem;">{{ u.name }}</strong>
+                  <span style="font-size:0.7rem; color:#38bdf8; font-weight:600;">Sign In &rarr;</span>
+                </div>
+                <span style="font-size:0.75rem; color:#94a3b8; font-family:var(--font-mono, monospace);">✉️ {{ u.email }}</span>
+              </div>
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:0.8rem; margin:0.2rem 0;">
+          <div style="flex:1; height:1px; background:var(--border);"></div>
+          <span style="font-size:0.72rem; color:var(--text-muted); text-transform:uppercase;">or sign in with another gmail address</span>
+          <div style="flex:1; height:1px; background:var(--border);"></div>
+        </div>
+
+        <!-- Custom Gmail Sign In Form -->
+        <form id="customLoginForm" style="display:flex; flex-direction:column; gap:0.8rem;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Full Name</label>
+            <input type="text" id="customLoginName" placeholder="e.g. Alex Rivera" required />
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Gmail / Email Address</label>
+            <input type="email" id="customLoginEmail" placeholder="e.g. alex.rivera@gmail.com" required />
+          </div>
+          <button type="submit" class="btn btn-primary" style="justify-content:center; padding:0.7rem; margin-top:0.3rem;">
+            Sign In with Gmail
+          </button>
+        </form>
       </div>
     </div>
   </div>

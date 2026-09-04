@@ -376,7 +376,10 @@
       <div class="trip-meta" style="margin-top:0.6rem;">
         <span class="meta-badge">📅 Dates: {{ date_range_str }}</span>
         <span class="meta-badge">🏙️ Cities: {{ cities|map(attribute='city_name')|join(', ') }}</span>
-        <span class="meta-badge">👥 Team: {{ collaborators|map(attribute='name')|join(', ') }}</span>
+        {% if current_user %}
+        <span class="meta-badge">👤 Active User: <strong>{{ current_user.name }}</strong> ({{ current_user.email }})</span>
+        {% endif %}
+        <span class="meta-badge">👥 Team: {% for c in collaborators %}{{ c.name }} ({{ c.email }}){% if not loop.last %}, {% endif %}{% endfor %}</span>
       </div>
     </div>
 
