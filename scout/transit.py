@@ -37,20 +37,21 @@ def calculate_transit_from_stay(
     stay: Optional[Any],
     venue_lat: Optional[float],
     venue_lon: Optional[float],
-    city_name: str = "Lisbon"
+    city_name: str = ""
 ) -> Dict[str, Any]:
     """
     Calculate accurate distance (km & miles) and transit recommendations
     relative to the specific hotel active on that date.
     """
+    city_label = city_name.strip() if city_name else ""
     if not stay or stay.lat is None or stay.lon is None or venue_lat is None or venue_lon is None:
         return {
-            "stay_name": stay.name if stay else "City Center",
+            "stay_name": stay.name if stay else (city_label or "City Center"),
             "miles": 1.0,
             "km": 1.6,
             "walk_time": "20 mins",
-            "best_mode": f"Local {city_name} transit / walk",
-            "summary": f"Check local transit directions from {stay.name if stay else city_name}."
+            "best_mode": f"{city_label + ' ' if city_label else ''}Transit / Walk",
+            "summary": f"Check local transit directions from {stay.name if stay else (city_label or 'hotel')}."
         }
 
     km = haversine_km(stay.lat, stay.lon, venue_lat, venue_lon)
@@ -69,26 +70,45 @@ def calculate_transit_from_stay(
     elif walk_mins <= 25:
         walk_time_str = f"{walk_mins} min walk"
         best_mode = f"Scenic Walk ({walk_mins} mins)"
-        summary = f"Pleasant {walk_mins} min walk ({miles} mi) through {city_name} from {stay.name}."
+        city_phrase = f" through {city_label}" if city_label else ""
+        summary = f"Pleasant {walk_mins} min walk ({miles} mi){city_phrase} from {stay.name}."
     else:
         hours = walk_mins // 60
         rem_mins = walk_mins % 60
         walk_time_str = f"{hours}h {rem_mins}m walk" if hours > 0 else f"{walk_mins} mins"
 
-        if "Lisbon" in city_name:
+        if "Lisbon" in city_label:
             metro_mins = max(10, int(km * 3) + 6)
             best_mode = f"Lisbon Metro / Tram ({metro_mins} mins)"
             summary = f"Take Metro or Tram from near {stay.name} (~{metro_mins} mins total)."
-        elif "Porto" in city_name:
+        elif "Porto" in city_label:
             metro_mins = max(10, int(km * 3) + 5)
             best_mode = f"Metro do Porto / Uber ({metro_mins} mins)"
             summary = f"Direct Metro or quick Uber from {stay.name} across Gaia/Porto (~{metro_mins} mins)."
-        elif "Bragança" in city_name:
+        elif "Bragança" in city_label or "Braganca" in city_label:
             bus_mins = max(8, int(km * 4) + 4)
             best_mode = f"STUB Bus / Taxi ({bus_mins} mins)"
             summary = f"Quick 6-min drive or urban bus from {stay.name} to the citadel."
+        elif "Tokyo" in city_label:
+            train_mins = max(8, int(km * 2.5) + 5)
+            best_mode = f"Tokyo Metro / JR Line ({train_mins} mins)"
+            summary = f"Take Tokyo Metro or JR line from near {stay.name} (~{train_mins} mins)."
+        elif "Paris" in city_label:
+            metro_mins = max(8, int(km * 2.8) + 5)
+            best_mode = f"Paris Métro / RER ({metro_mins} mins)"
+            summary = f"Direct Métro or scenic walk from {stay.name} (~{metro_mins} mins)."
+        elif "London" in city_label:
+            tube_mins = max(10, int(km * 2.8) + 5)
+            best_mode = f"London Underground / Bus ({tube_mins} mins)"
+            summary = f"Take the Tube or red bus from near {stay.name} (~{tube_mins} mins)."
+        elif "New York" in city_label:
+            subway_mins = max(8, int(km * 2.8) + 5)
+            best_mode = f"NYC Subway / Taxi ({subway_mins} mins)"
+            summary = f"Take NYC Subway or yellow taxi from {stay.name} (~{subway_mins} mins)."
         else:
-            best_mode = f"Transit / Rideshare ({max(10, int(km * 3))} mins)"
+            transit_mins = max(10, int(km * 3))
+            prefix = f"{city_label} " if city_label else ""
+            best_mode = f"{prefix}Transit / Rideshare ({transit_mins} mins)"
             summary = f"Take local transit or rideshare from {stay.name} ({miles} mi)."
 
     return {

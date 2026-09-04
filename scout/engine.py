@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from database.models import User, Trip, TripCollaborator, CitySegment, StayLocation, ItineraryItem
 from scout.config import CITY_PRESETS
+from scout.geocoding import resolve_city_coordinates
 from scout.preseeded_data import PRESEEDED_ITEMS
 from scout.web_search import live_city_search
 from scout.transit import resolve_stay_for_date, calculate_transit_from_stay
@@ -270,9 +271,12 @@ class ScoutEngine:
         hotel_address: str
     ) -> CitySegment:
         """Add a new destination city with starting accommodation."""
+        # Resolve real geographic coordinates dynamically for any city worldwide
+        res_lat, res_lon, res_country = resolve_city_coordinates(city_name, country)
         city_preset = CITY_PRESETS.get(city_name, {})
-        city_lat = city_preset.get("lat", 38.7223)
-        city_lon = city_preset.get("lon", -9.1393)
+        city_lat = city_preset.get("lat") or (res_lat if res_lat != 0.0 else 0.0)
+        city_lon = city_preset.get("lon") or (res_lon if res_lon != 0.0 else 0.0)
+        effective_country = country or res_country or city_preset.get("country", "")
 
         stay_lat = city_preset.get("stay_lat", city_lat)
         stay_lon = city_preset.get("stay_lon", city_lon)
@@ -283,7 +287,7 @@ class ScoutEngine:
         segment = CitySegment(
             trip_id=trip_id,
             city_name=city_name,
-            country=country,
+            country=effective_country,
             start_date=start_date,
             end_date=end_date,
             order_index=max_order + 1,
@@ -366,8 +370,8 @@ class ScoutEngine:
     ) -> StayLocation:
         """Add an additional stay/hotel by date for moving hotels midway through a city stay."""
         seg = db.query(CitySegment).filter(CitySegment.id == city_id).first()
-        city_lat = seg.lat if seg else 38.7223
-        city_lon = seg.lon if seg else -9.1393
+        city_lat = seg.lat if (seg and seg.lat is not None) else 0.0
+        city_lon = seg.lon if (seg and seg.lon is not None) else 0.0
 
         stay = StayLocation(
             city_segment_id=city_id,
@@ -384,8 +388,11 @@ class ScoutEngine:
         db.refresh(stay)
         return stay
 
-    def delete_stay(self, db: Session, stay_id: str) -> bool:
-        stay = db.query(StayLocation).filter(StayLocation.id == stay_id).first()
+    def delete_stay(self, db: Session, stay_id: str, trip_id: Optional[str] = None) -> bool:
+        query = db.query(StayLocation)
+        if trip_id:
+            query = query.join(CitySegment).filter(CitySegment.trip_id == trip_id)
+        stay = query.filter(StayLocation.id == stay_id).first()
         if not stay:
             return False
         db.delete(stay)
@@ -399,7 +406,13 @@ class ScoutEngine:
 
         scan_templates = [
             ("live music concerts gig guide tickets and venues", "music", "music"),
+            ("craft breweries and beer tasting rooms", "beer", "breweries"),
+            ("craft cocktail bars and secret speakeasies", "cocktails", "cocktails"),
+            ("michelin star restaurants and fine dining", "michelin", "michelin"),
             ("top wine tastings and cellars", "wine", "guides"),
+            ("eater heatmap essential restaurants", "dining", "eater"),
+            ("yelp best rated local dining and hidden spots", "dining", "yelp"),
+            ("city magazine best of dining and nightlife guide", "gems", "magazines"),
             ("hidden gems and secret viewpoints Reddit", "gems", "reddit"),
             ("new restaurant openings and food finds", "dining", "blogs"),
             ("viral food and must visit spots", "dining", "tiktok"),

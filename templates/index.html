@@ -24,7 +24,7 @@
             <button id="headerDeleteTripBtn" class="btn btn-secondary btn-sm" style="padding:0.2rem 0.55rem; font-size:0.75rem; background:rgba(244,63,94,0.15); color:#fca5a5; border:1px solid rgba(244,63,94,0.4); cursor:pointer;" title="Permanently delete this entire trip">🗑️ Delete Trip</button>
             <select id="tripSwitcherSelect" class="user-switcher" style="padding:0.25rem 0.5rem; font-size:0.75rem; border-radius:6px; background:rgba(255,255,255,0.06); border:1px solid var(--border); color:var(--text-main);" title="Switch between saved itineraries"></select>
           </div>
-          <p class="logo-subtitle" id="tripSubtitle">Portugal Grand Expedition &bull; Lisbon &rarr; Porto &rarr; Bragança</p>
+          <p class="logo-subtitle" id="tripSubtitle">Collaborative Multi-City Travel Planner</p>
         </div>
       </div>
 
@@ -303,7 +303,7 @@
           <select id="scoutTargetCity">
             <!-- Injected via JavaScript -->
           </select>
-          <input type="text" id="scoutQueryInput" placeholder="Try: 'Fado in Alfama', 'Port wine tastings Gaia', 'Medieval festival Bragança', 'Reddit food'" />
+          <input type="text" id="scoutQueryInput" placeholder="Search live concerts, music venues, hidden gems, food blogs, or reddit tips..." />
           <select id="scoutChannelSelect">
             {% for k, v in search_channels.items() %}
             <option value="{{ k }}">{{ v.label }}</option>
@@ -318,14 +318,8 @@
           <button id="runScoutBtn" class="btn btn-primary">Scout City 🚀</button>
         </div>
 
-        <div class="scout-suggestions">
-          <span style="font-size:0.8rem; color:var(--text-muted);">Quick Scout:</span>
-          <button type="button" class="scout-chip" data-city="Lisbon" data-q="live music concerts gig guide" data-ch="music">🎵 Lisbon Gigs (Eventbrite/Songkick/DICE)</button>
-          <button type="button" class="scout-chip" data-city="Porto" data-q="live music venues and concert halls" data-ch="venues">🏛️ Porto Music Venues</button>
-          <button type="button" class="scout-chip" data-city="Lisbon" data-q="authentic Fado clubs Alfama" data-ch="blogs">🎶 Lisbon Fado</button>
-          <button type="button" class="scout-chip" data-city="Porto" data-q="best Port wine cellars Vila Nova de Gaia" data-ch="guides">🍷 Porto Cellars</button>
-          <button type="button" class="scout-chip" data-city="Bragança" data-q="Posta Mirandesa traditional restaurant" data-ch="reddit">🥩 Bragança Veal</button>
-          <button type="button" class="scout-chip" data-city="Lisbon" data-q="Reddit hidden gems secret viewpoints" data-ch="reddit">💎 Lisbon Gems</button>
+        <div class="scout-suggestions" id="scoutSuggestions">
+          <!-- Injected dynamically via JavaScript based on active trip itinerary cities -->
         </div>
       </div>
 
@@ -354,7 +348,7 @@
         </div>
         <div class="form-group">
           <label>Country</label>
-          <input type="text" id="newCityCountry" value="Portugal" required />
+          <input type="text" id="newCityCountry" placeholder="e.g. Japan, France, Italy, United States" required />
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -483,7 +477,7 @@
       <form id="editTripForm">
         <div class="form-group">
           <label>Trip Title</label>
-          <input type="text" id="editTripTitleInput" placeholder="e.g. Portugal Grand Expedition" required />
+          <input type="text" id="editTripTitleInput" placeholder="e.g. Japan Cherry Blossom & Culinary Tour" required />
         </div>
         <div class="form-group">
           <label>Description / Trip Purpose</label>

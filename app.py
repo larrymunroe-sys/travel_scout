@@ -1,4 +1,8 @@
 import os
+import time
+import hmac
+import hashlib
+import secrets
 import urllib.parse
 import httpx
 from pathlib import Path
@@ -9,7 +13,7 @@ from fastapi import FastAPI, Depends, Request, Response, HTTPException, status
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -25,6 +29,20 @@ app = FastAPI(
     description="Plan multi-city journeys with multiple stays per city, dynamic transit, and real-time collaboration.",
     version="1.0.0",
 )
+
+# ==================== SECURITY HEADERS MIDDLEWARE ====================
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    is_https = request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https"
+    if is_https:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 scout_engine = ScoutEngine()
 
@@ -42,16 +60,85 @@ init_db()
 with SessionLocal() as _db:
     scout_engine.seed_initial_data_if_empty(_db)
 
-# ==================== AUTHENTICATION HELPER ====================
+# ==================== CRYPTOGRAPHIC SESSION MANAGEMENT ====================
+
+SESSION_COOKIE_NAME = "travel_scout_session"
+SESSION_MAX_AGE = 86400 * 30  # 30 days
+
+# Persistent session signing secret
+SESSION_SECRET = os.environ.get("SESSION_SECRET")
+if not SESSION_SECRET:
+    secret_file = BASE_DIR / ".session_secret"
+    if secret_file.exists():
+        try:
+            SESSION_SECRET = secret_file.read_text(encoding="utf-8").strip()
+        except Exception:
+            SESSION_SECRET = ""
+    if not SESSION_SECRET:
+        SESSION_SECRET = secrets.token_hex(32)
+        try:
+            secret_file.write_text(SESSION_SECRET, encoding="utf-8")
+        except Exception:
+            pass
+
+def sign_session_token(user_id: str) -> str:
+    """Generate a cryptographically signed HMAC session token."""
+    timestamp = int(time.time())
+    msg = f"{user_id}:{timestamp}"
+    sig = hmac.new(SESSION_SECRET.encode("utf-8"), msg.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{user_id}.{timestamp}.{sig}"
+
+def verify_session_token(token: Optional[str]) -> Optional[str]:
+    """Verify cryptographic HMAC signature and expiry for a session token."""
+    if not token or token in ("logged_out", "null", "undefined"):
+        return None
+    parts = token.split(".")
+    if len(parts) != 3:
+        return None
+    user_id, timestamp_str, sig = parts
+    try:
+        timestamp = int(timestamp_str)
+    except ValueError:
+        return None
+    if time.time() - timestamp > SESSION_MAX_AGE or timestamp > time.time() + 300:
+        return None
+    msg = f"{user_id}:{timestamp}"
+    expected_sig = hmac.new(SESSION_SECRET.encode("utf-8"), msg.encode("utf-8"), hashlib.sha256).hexdigest()
+    if hmac.compare_digest(expected_sig, sig):
+        return user_id
+    return None
+
+def set_session_cookie(response: Response, user_id: str, request: Request) -> str:
+    """Set a hardened, HttpOnly, SameSite signed session cookie."""
+    token = sign_session_token(user_id)
+    is_https = request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https"
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=token,
+        max_age=SESSION_MAX_AGE,
+        httponly=True,
+        path="/",
+        samesite="lax",
+        secure=is_https
+    )
+    # Clear legacy unverified cookie
+    response.delete_cookie(key="travel_scout_user_id", path="/")
+    return token
 
 def get_optional_current_user(request: Request, db: Session = Depends(get_db)) -> Optional[User]:
-    """Retrieve user from session cookie or header. Returns None if explicitly logged out or no valid user found."""
-    user_id = request.cookies.get("travel_scout_user_id")
-    if not user_id:
-        user_id = request.headers.get("x-travel-scout-user-id")
+    """Retrieve verified user from cryptographic session cookie or signed header."""
+    session_token = request.cookies.get(SESSION_COOKIE_NAME)
+    if not session_token:
+        session_token = request.headers.get("x-travel-scout-session")
 
-    if user_id == "logged_out":
-        return None
+    user_id = verify_session_token(session_token)
+
+    # In local development mode ONLY, allow dev fallback if legacy x-travel-scout-user-id is supplied
+    is_dev = os.environ.get("ENVIRONMENT", "development").lower() in ("dev", "development", "local")
+    if not user_id and is_dev:
+        legacy_id = request.headers.get("x-travel-scout-user-id")
+        if legacy_id and legacy_id != "logged_out":
+            user_id = legacy_id
 
     if user_id:
         user = db.query(User).filter(User.id == user_id).first()
@@ -167,7 +254,7 @@ class CreateTripPayload(BaseModel):
     title: str
     description: Optional[str] = None
     first_city_name: Optional[str] = None
-    country: Optional[str] = "Portugal"
+    country: Optional[str] = None
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     hotel_name: Optional[str] = None
@@ -179,7 +266,7 @@ class UpdateTripPayload(BaseModel):
 
 class AddCityPayload(BaseModel):
     city_name: str
-    country: str = "Portugal"
+    country: Optional[str] = ""
     start_date: str
     end_date: str
     hotel_name: str
@@ -216,10 +303,33 @@ class AddItemPayload(BaseModel):
     source_platform: Optional[str] = "Curated"
     assigned_date: Optional[str] = "todo"
 
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: Optional[str]) -> Optional[str]:
+        if not v or not v.strip():
+            return None
+        clean = v.strip()
+        lower = clean.lower()
+        if lower.startswith("javascript:") or lower.startswith("data:") or lower.startswith("vbscript:"):
+            raise ValueError("Invalid URL scheme. Only HTTP and HTTPS URLs are allowed.")
+        return clean
+
 class UpdateItemPayload(BaseModel):
     assigned_date: Optional[str] = None
     city_segment_id: Optional[str] = None
     title: Optional[str] = None
+    url: Optional[str] = None
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: Optional[str]) -> Optional[str]:
+        if not v or not v.strip():
+            return None
+        clean = v.strip()
+        lower = clean.lower()
+        if lower.startswith("javascript:") or lower.startswith("data:") or lower.startswith("vbscript:"):
+            raise ValueError("Invalid URL scheme. Only HTTP and HTTPS URLs are allowed.")
+        return clean
 
 class UpdateNotePayload(BaseModel):
     personal_note: str
@@ -262,14 +372,20 @@ async def serve_index(request: Request, db: Session = Depends(get_db)):
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
 
+ALLOWED_HOSTS = set(filter(None, [h.strip() for h in os.environ.get("ALLOWED_HOSTS", "").split(",")]))
+
 def get_public_base_url(request: Request) -> str:
-    """Derive public URL accounting for Render's HTTPS reverse proxy."""
+    """Derive public URL safely without host header poisoning."""
     base = os.environ.get("BASE_URL")
     if base:
         return base.rstrip("/")
     proto = request.headers.get("x-forwarded-proto", request.url.scheme)
-    host = request.headers.get("x-forwarded-host", request.headers.get("host", request.url.netloc))
-    return f"{proto}://{host}"
+    raw_host = request.headers.get("x-forwarded-host", request.headers.get("host", request.url.netloc))
+    # If ALLOWED_HOSTS is configured, ensure host is within the allowlist
+    clean_host = raw_host.split(":")[0] if raw_host else "127.0.0.1"
+    if ALLOWED_HOSTS and clean_host not in ALLOWED_HOSTS and raw_host not in ALLOWED_HOSTS:
+        raw_host = request.url.netloc
+    return f"{proto}://{raw_host}"
 
 @app.get("/auth/google/status")
 async def google_auth_status():
@@ -281,12 +397,13 @@ async def google_auth_status():
 
 @app.get("/auth/google/login")
 async def google_login(request: Request):
-    """Redirect to Google's OAuth 2.0 authorization endpoint."""
+    """Redirect to Google's OAuth 2.0 authorization endpoint with CSRF state protection."""
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         return RedirectResponse(url="/?error=google_oauth_not_configured")
 
     base_url = get_public_base_url(request)
     redirect_uri = f"{base_url}/auth/google/callback"
+    oauth_state = secrets.token_urlsafe(32)
 
     params = {
         "client_id": GOOGLE_CLIENT_ID,
@@ -295,20 +412,38 @@ async def google_login(request: Request):
         "scope": "openid email profile",
         "access_type": "offline",
         "prompt": "select_account",
+        "state": oauth_state,
     }
     google_auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(params)}"
-    return RedirectResponse(url=google_auth_url)
+    
+    is_https = request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https"
+    redirect_resp = RedirectResponse(url=google_auth_url)
+    redirect_resp.set_cookie(
+        key="oauth_state",
+        value=oauth_state,
+        max_age=600,  # 10 minutes expiry
+        httponly=True,
+        path="/",
+        samesite="lax",
+        secure=is_https
+    )
+    return redirect_resp
 
 @app.get("/auth/google/callback")
 async def google_callback(
     request: Request,
     code: Optional[str] = None,
+    state: Optional[str] = None,
     error: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """Handle Google OAuth 2.0 redirect callback, exchange code, and sign in user."""
     if error or not code:
         return RedirectResponse(url=f"/?error={error or 'no_code'}")
+
+    stored_state = request.cookies.get("oauth_state")
+    if not state or not stored_state or not hmac.compare_digest(state, stored_state):
+        return RedirectResponse(url="/?error=oauth_state_verification_failed")
 
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         return RedirectResponse(url="/?error=google_oauth_not_configured")
@@ -364,17 +499,9 @@ async def google_callback(
                     user.avatar_url = picture
                     db.commit()
 
-            is_https = request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https"
-            redirect_resp = RedirectResponse(url=f"/?google_auth=success&user_id={user.id}")
-            redirect_resp.set_cookie(
-                key="travel_scout_user_id",
-                value=user.id,
-                max_age=86400 * 30,
-                httponly=False,
-                path="/",
-                samesite="lax",
-                secure=is_https
-            )
+            redirect_resp = RedirectResponse(url="/?google_auth=success")
+            set_session_cookie(redirect_resp, user.id, request)
+            redirect_resp.delete_cookie(key="oauth_state", path="/")
             return redirect_resp
 
     except Exception as e:
@@ -386,6 +513,13 @@ async def google_callback(
 @app.post("/auth/dev-login")
 async def dev_login(payload: DevLoginPayload, request: Request, response: Response, db: Session = Depends(get_db)):
     """One-click instant login/switching for multi-user collaboration testing."""
+    env = os.environ.get("ENVIRONMENT", "development").lower()
+    if env == "production" and os.environ.get("ENABLE_DEV_LOGIN", "false").lower() not in ("true", "1", "yes"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Development login is disabled in production environments."
+        )
+
     user = db.query(User).filter(User.email == payload.email).first()
     if not user:
         user = User(
@@ -397,18 +531,10 @@ async def dev_login(payload: DevLoginPayload, request: Request, response: Respon
         db.commit()
         db.refresh(user)
 
-    is_https = request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https"
-    response.set_cookie(
-        key="travel_scout_user_id",
-        value=user.id,
-        max_age=86400 * 30,
-        httponly=False,
-        path="/",
-        samesite="lax",
-        secure=is_https
-    )
+    session_token = set_session_cookie(response, user.id, request)
     return {
         "status": "success",
+        "session_token": session_token,
         "user": {
             "id": user.id,
             "name": user.name,
@@ -439,22 +565,15 @@ async def get_me(request: Request, db: Session = Depends(get_db)):
 @app.post("/auth/logout")
 async def logout(request: Request, response: Response):
     is_https = request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https"
-    response.set_cookie(
-        key="travel_scout_user_id",
-        value="logged_out",
-        max_age=86400 * 30,
-        httponly=False,
-        path="/",
-        samesite="lax",
-        secure=is_https
-    )
+    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/", secure=is_https, samesite="lax")
+    response.delete_cookie(key="travel_scout_user_id", path="/")
     return {"status": "logged_out"}
 
 # ==================== USER MANAGEMENT API ROUTES ====================
 
 @app.get("/api/users")
-async def list_all_users(db: Session = Depends(get_db)):
-    """List all registered users with their trip count and metadata."""
+async def list_all_users(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """List registered users with their trip count and metadata (requires authenticated user)."""
     users = db.query(User).order_by(User.created_at.asc()).all()
     demo_emails = {"larrymunroe@gmail.com", "sarah.chen@gmail.com"}
     result = []
@@ -475,8 +594,20 @@ async def list_all_users(db: Session = Depends(get_db)):
     return result
 
 @app.delete("/api/users/{user_id}")
-async def delete_user(user_id: str, request: Request, response: Response, db: Session = Depends(get_db)):
-    """Permanently delete a user, cascading their owned trips and cleaning up relationships."""
+async def delete_user(
+    user_id: str, 
+    request: Request, 
+    response: Response, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Permanently delete a user account (strictly restricted to the authenticated user deleting their own account)."""
+    if current_user.id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You are only authorized to delete your own user account."
+        )
+
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -509,30 +640,38 @@ async def delete_user(user_id: str, request: Request, response: Response, db: Se
     db.delete(user)
     db.commit()
 
-    # If the deleted user was active in session, clear cookie
-    current_cookie = request.cookies.get("travel_scout_user_id")
-    was_logged_in = (current_cookie == user_id)
-    if was_logged_in:
-        response.delete_cookie(key="travel_scout_user_id", path="/")
+    # Clear active session cookies
+    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
+    response.delete_cookie(key="travel_scout_user_id", path="/")
 
     return {
         "status": "success",
         "message": f"User {deleted_email} has been permanently deleted.",
-        "was_logged_in": was_logged_in
+        "was_logged_in": True
     }
 
 @app.post("/api/users/cleanup-demo")
-async def cleanup_demo_users(request: Request, response: Response, db: Session = Depends(get_db)):
-    """Delete all pre-seeded demo accounts (larrymunroe@gmail.com, sarah.chen@gmail.com) and their demo trips."""
+async def cleanup_demo_users(
+    request: Request, 
+    response: Response, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Delete pre-seeded demo accounts and demo trips (restricted to demo accounts or authorized admins)."""
     demo_emails = ["larrymunroe@gmail.com", "sarah.chen@gmail.com"]
+    if current_user.email not in demo_emails:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Only registered demo travelers can trigger demo data purge."
+        )
+
     users = db.query(User).filter(User.email.in_(demo_emails)).all()
     deleted_names = []
-    current_cookie = request.cookies.get("travel_scout_user_id")
     was_logged_in = False
 
     for user in users:
         deleted_names.append(user.email)
-        if current_cookie == user.id:
+        if current_user.id == user.id:
             was_logged_in = True
 
         # Delete owned trips
@@ -554,6 +693,7 @@ async def cleanup_demo_users(request: Request, response: Response, db: Session =
     db.commit()
 
     if was_logged_in:
+        response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
         response.delete_cookie(key="travel_scout_user_id", path="/")
 
     return {
@@ -607,7 +747,7 @@ async def create_trip(payload: CreateTripPayload, request: Request, db: Session 
             db=db,
             trip_id=trip.id,
             city_name=payload.first_city_name,
-            country=payload.country or "Country",
+            country=payload.country or "",
             start_date=payload.start_date,
             end_date=payload.end_date,
             hotel_name=payload.hotel_name or f"{payload.first_city_name} Hotel",
@@ -1068,6 +1208,12 @@ async def add_stay(trip_id: str, city_id: str, payload: AddStayPayload, request:
     """Add an additional stay/hotel by date for moving accommodations midway."""
     user = get_current_user(request, db)
     check_trip_access(trip_id, user, db, require_edit=True)
+
+    # Ensure city segment belongs to this trip (prevent IDOR)
+    seg = db.query(CitySegment).filter(CitySegment.id == city_id, CitySegment.trip_id == trip_id).first()
+    if not seg:
+        raise HTTPException(status_code=404, detail="City segment not found on this itinerary.")
+
     stay = scout_engine.add_stay(
         db=db,
         city_id=city_id,
@@ -1083,9 +1229,17 @@ async def add_stay(trip_id: str, city_id: str, payload: AddStayPayload, request:
 async def delete_stay(trip_id: str, stay_id: str, request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     check_trip_access(trip_id, user, db, require_edit=True)
-    success = scout_engine.delete_stay(db, stay_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Stay not found")
+
+    # Verify stay belongs to a city segment in this specific trip (prevent IDOR)
+    stay = db.query(StayLocation).join(CitySegment).filter(
+        StayLocation.id == stay_id,
+        CitySegment.trip_id == trip_id
+    ).first()
+    if not stay:
+        raise HTTPException(status_code=404, detail="Stay not found on this itinerary.")
+
+    db.delete(stay)
+    db.commit()
     return {"status": "deleted", "stay_id": stay_id}
 
 # ==================== ITINERARY ITEM CRUD ====================
@@ -1143,6 +1297,8 @@ async def update_itinerary_item(
         item.city_segment_id = payload.city_segment_id
     if payload.title is not None:
         item.title = payload.title
+    if payload.url is not None:
+        item.url = payload.url
 
     db.commit()
     return {"status": "updated", "item_id": item.id, "assigned_date": item.assigned_date}
@@ -1213,9 +1369,15 @@ async def invite_collaborator(
     request: Request,
     db: Session = Depends(get_db)
 ):
-    """Invite collaborator by Gmail / email address."""
+    """Invite collaborator by Gmail / email address (restricted to trip owner)."""
     current_user = get_current_user(request, db)
-    check_trip_access(trip_id, current_user, db, require_edit=True)
+    trip = check_trip_access(trip_id, current_user, db, require_edit=True)
+
+    if trip.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Only the trip owner/creator can invite collaborators."
+        )
 
     user = db.query(User).filter(User.email == payload.email).first()
     if not user:
@@ -1262,7 +1424,7 @@ async def remove_collaborator(
     request: Request,
     db: Session = Depends(get_db)
 ):
-    """Remove an invited contributor from the trip."""
+    """Remove an invited contributor from the trip (restricted to owner or self-removal)."""
     current_user = get_current_user(request, db)
     trip = check_trip_access(trip_id, current_user, db, require_edit=True)
 
@@ -1270,6 +1432,12 @@ async def remove_collaborator(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot remove the trip creator/owner from the trip."
+        )
+
+    if trip.owner_id != current_user.id and current_user.id != collaborator_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Only the trip owner can remove other collaborators."
         )
 
     collab = db.query(TripCollaborator).filter(
@@ -1287,8 +1455,8 @@ async def remove_collaborator(
 # ==================== CITY-SCOPED LIVE SEARCH & DAILY SCAN ====================
 
 @app.post("/api/search")
-async def search_city(payload: SearchPayload):
-    """Run live web scout scoped to the target city."""
+async def search_city(payload: SearchPayload, current_user: User = Depends(get_current_user)):
+    """Run live web scout scoped to the target city (requires authenticated user)."""
     results = live_city_search(
         city_name=payload.city_name,
         query=payload.query,

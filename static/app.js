@@ -75,9 +75,12 @@ function initTabs() {
 // 2. Auth & User Switcher
 async function loadCurrentUser() {
   try {
+    const sessionToken = localStorage.getItem("travel_scout_session");
     const localUserId = localStorage.getItem("travel_scout_user_id");
     const headers = {};
-    if (localUserId) {
+    if (sessionToken) {
+      headers["x-travel-scout-session"] = sessionToken;
+    } else if (localUserId) {
       headers["x-travel-scout-user-id"] = localUserId;
     }
 
@@ -249,9 +252,12 @@ async function loadCurrentUser() {
 
 // User Management Modal Handlers
 function getAuthHeaders(extra = {}) {
+  const sessionToken = localStorage.getItem("travel_scout_session");
   const localUserId = localStorage.getItem("travel_scout_user_id");
   const headers = { ...extra };
-  if (localUserId) {
+  if (sessionToken) {
+    headers["x-travel-scout-session"] = sessionToken;
+  } else if (localUserId) {
     headers["x-travel-scout-user-id"] = localUserId;
   }
   return headers;
@@ -344,6 +350,7 @@ async function deleteUserAccount(userId) {
     }
     alert(data.message || "User deleted successfully!");
     if (data.was_logged_in) {
+      localStorage.removeItem("travel_scout_session");
       localStorage.removeItem("travel_scout_user_id");
       window.location.reload();
     } else {
@@ -372,6 +379,7 @@ async function purgeDemoAccounts() {
     }
     alert(`Demo accounts purged successfully! (${data.count} demo users removed)`);
     if (data.was_logged_in) {
+      localStorage.removeItem("travel_scout_session");
       localStorage.removeItem("travel_scout_user_id");
       window.location.reload();
     } else {
@@ -397,6 +405,9 @@ async function loginAs(email, name) {
       return;
     }
     const data = await res.json();
+    if (data.session_token) {
+      localStorage.setItem("travel_scout_session", data.session_token);
+    }
     if (data.user && data.user.id) {
       localStorage.setItem("travel_scout_user_id", data.user.id);
     }
@@ -408,11 +419,13 @@ async function loginAs(email, name) {
 
 async function logoff() {
   try {
+    localStorage.removeItem("travel_scout_session");
     localStorage.removeItem("travel_scout_user_id");
     await fetch("/auth/logout", { method: "POST", credentials: "include" });
     window.location.reload();
   } catch (err) {
     console.error("Logout error:", err);
+    localStorage.removeItem("travel_scout_session");
     localStorage.removeItem("travel_scout_user_id");
     window.location.reload();
   }
@@ -513,8 +526,18 @@ async function refreshTrip() {
     if (currentTripData.trip) {
       const sub = document.getElementById("tripSubtitle");
       if (sub) {
-        const desc = currentTripData.trip.description ? ` &bull; ${escapeHtml(currentTripData.trip.description)}` : "";
-        sub.innerHTML = `${escapeHtml(currentTripData.trip.title)}${desc}`;
+        const citiesList = currentTripData.cities || [];
+        const citiesTrail = citiesList.length > 0
+          ? citiesList.map(c => escapeHtml(c.city_name)).join(" &rarr; ")
+          : "";
+        const desc = currentTripData.trip.description ? escapeHtml(currentTripData.trip.description) : "";
+        let titleHtml = `<strong>${escapeHtml(currentTripData.trip.title)}</strong>`;
+        if (citiesTrail) {
+          titleHtml += ` &bull; ${citiesTrail}`;
+        } else if (desc) {
+          titleHtml += ` &bull; ${desc}`;
+        }
+        sub.innerHTML = titleHtml;
       }
     }
 
@@ -731,10 +754,16 @@ function renderItineraryTab() {
 function renderCard(item, availableDates) {
   const author = item.added_by || { name: "Traveler", avatar_color: "#38bdf8" };
   const transit = item.transit || {};
+  const categories = (currentTripData && currentTripData.categories) || {};
+  const catConfig = categories[item.category] || {
+    icon: "✨",
+    label: item.category ? (item.category.charAt(0).toUpperCase() + item.category.slice(1)) : "General"
+  };
 
   const hasDirectUrl = Boolean(item.url && item.url.trim() !== "");
-  const targetUrl = hasDirectUrl
-    ? item.url
+  const safeDirectUrl = hasDirectUrl ? sanitizeUrl(item.url) : "";
+  const targetUrl = safeDirectUrl
+    ? safeDirectUrl
     : `https://www.google.com/search?q=${encodeURIComponent(item.title + ' ' + (item.city_name || ''))}`;
 
   let mapsUrl = "";
@@ -761,7 +790,10 @@ function renderCard(item, availableDates) {
             <span style="color:#fbbf24; font-weight:600;">${escapeHtml(item.cost || 'Free')}</span>
           </div>
         </div>
-        <span class="card-city-badge">${escapeHtml(item.city_name || 'General')}</span>
+        <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap; justify-content:flex-end;">
+          <span class="badge" style="background:rgba(56,189,248,0.12); color:#38bdf8; font-size:0.72rem; padding:0.18rem 0.45rem;">${catConfig.icon} ${escapeHtml(catConfig.label)}</span>
+          <span class="card-city-badge">${escapeHtml(item.city_name || 'General')}</span>
+        </div>
       </div>
 
       <!-- Date-Matched Hotel Transit Box -->
@@ -778,8 +810,8 @@ function renderCard(item, availableDates) {
 
       <!-- Item Direct Links Row -->
       <div class="card-links-row">
-        ${hasDirectUrl ? `
-          <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" class="item-link-pill primary" title="Visit official source or guide">
+        ${safeDirectUrl ? `
+          <a href="${escapeHtml(safeDirectUrl)}" target="_blank" rel="noopener noreferrer" class="item-link-pill primary" title="Visit official source or guide">
             🌐 ${sourceLabel} ↗
           </a>
         ` : `
@@ -1221,8 +1253,9 @@ function renderExploreCard(item, availableDates) {
   };
 
   const hasDirectUrl = Boolean(item.url && item.url.trim() !== "");
-  const targetUrl = hasDirectUrl
-    ? item.url
+  const safeDirectUrl = hasDirectUrl ? sanitizeUrl(item.url) : "";
+  const targetUrl = safeDirectUrl
+    ? safeDirectUrl
     : `https://www.google.com/search?q=${encodeURIComponent(item.title + ' ' + (item.city_name || ''))}`;
 
   let mapsUrl = "";
@@ -1258,6 +1291,12 @@ function renderExploreCard(item, availableDates) {
   else if (/dice/i.test(item.source_platform)) sourceIcon = "🎲";
   else if (/ticketmaster/i.test(item.source_platform)) sourceIcon = "🎫";
   else if (/venue/i.test(item.source_platform)) sourceIcon = "🏛️";
+  else if (/yelp/i.test(item.source_platform)) sourceIcon = "⭐";
+  else if (/eater/i.test(item.source_platform)) sourceIcon = "🍴";
+  else if (/michelin/i.test(item.source_platform)) sourceIcon = "⭐";
+  else if (/brewery|beer/i.test(item.source_platform)) sourceIcon = "🍺";
+  else if (/cocktail|speakeasy/i.test(item.source_platform)) sourceIcon = "🍸";
+  else if (/magazine/i.test(item.source_platform)) sourceIcon = "📰";
   else if (/reddit/i.test(item.source_platform)) sourceIcon = "💬";
   else if (/tiktok/i.test(item.source_platform)) sourceIcon = "🎬";
 
@@ -1344,8 +1383,8 @@ function renderExploreCard(item, availableDates) {
           <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" style="color:#38bdf8; font-size:0.8rem; text-decoration:none; font-weight:500;">
             📍 Maps
           </a>
-          ${hasDirectUrl ? `
-            <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" style="color:#a78bfa; font-size:0.8rem; text-decoration:none; font-weight:500;">
+          ${safeDirectUrl ? `
+            <a href="${escapeHtml(safeDirectUrl)}" target="_blank" rel="noopener noreferrer" style="color:#a78bfa; font-size:0.8rem; text-decoration:none; font-weight:500;">
               🌐 ${sourceLabel} &rarr;
             </a>
           ` : `
@@ -1468,7 +1507,7 @@ function initModals() {
       }
 
       const cityName = document.getElementById("newCityName").value.trim();
-      const country = document.getElementById("newCityCountry").value.trim() || "Portugal";
+      const country = document.getElementById("newCityCountry").value.trim() || "";
       const startDate = document.getElementById("newCityStart").value;
       const endDate = document.getElementById("newCityEnd").value;
       const hotelName = document.getElementById("newCityHotel").value.trim();
@@ -1485,7 +1524,7 @@ function initModals() {
         start_date: startDate,
         end_date: endDate,
         hotel_name: hotelName || `${cityName} Central Hotel`,
-        hotel_address: hotelAddress || `${cityName}, ${country}`,
+        hotel_address: hotelAddress || (country ? `${cityName}, ${country}` : cityName),
       };
 
       try {
@@ -2024,7 +2063,7 @@ function populateCityDropdowns() {
 
   if (!currentTripData) return;
 
-  const cities = currentTripData.cities;
+  const cities = currentTripData.cities || [];
 
   if (itinSelect) {
     const prev = itinSelect.value;
@@ -2035,13 +2074,69 @@ function populateCityDropdowns() {
   }
 
   if (scoutSelect) {
+    const prev = scoutSelect.value;
     scoutSelect.innerHTML = cities.map(c => `<option value="${escapeHtml(c.city_name)}">🏙️ ${escapeHtml(c.city_name)}</option>`).join("");
+    if (prev && cities.some(c => c.city_name === prev)) {
+      scoutSelect.value = prev;
+    }
+    scoutSelect.onchange = () => renderScoutSuggestions();
   }
 
   if (mapCitySelect) {
     mapCitySelect.innerHTML = `<option value="all">🌍 Whole Journey Overview</option>` +
       cities.map(c => `<option value="${c.id}">${escapeHtml(c.city_name)}</option>`).join("");
   }
+
+  renderScoutSuggestions();
+}
+
+function renderScoutSuggestions() {
+  const container = document.getElementById("scoutSuggestions");
+  const citySelect = document.getElementById("scoutTargetCity");
+  const queryInput = document.getElementById("scoutQueryInput");
+  if (!container) return;
+
+  const cities = (currentTripData && currentTripData.cities) ? currentTripData.cities : [];
+  if (cities.length === 0) {
+    container.innerHTML = `<span style="font-size:0.8rem; color:var(--text-muted);">Add destination cities to your journey to see tailored live scout suggestions.</span>`;
+    return;
+  }
+
+  const selectedCity = citySelect ? (citySelect.value || cities[0].city_name) : cities[0].city_name;
+  if (queryInput) {
+    queryInput.placeholder = `Search live concerts, venues, hidden gems, or dining in ${selectedCity}...`;
+  }
+
+  let chipsHtml = `<span style="font-size:0.8rem; color:var(--text-muted);">Quick Scout:</span>`;
+  cities.forEach(c => {
+    const name = escapeHtml(c.city_name);
+    chipsHtml += `
+      <button type="button" class="scout-chip" data-city="${name}" data-q="craft breweries beer tasting rooms taprooms" data-ch="breweries">🍺 ${name} Breweries & Taprooms</button>
+      <button type="button" class="scout-chip" data-city="${name}" data-q="craft cocktail bars and secret speakeasies" data-ch="cocktails">🍸 ${name} Speakeasies & Cocktails</button>
+      <button type="button" class="scout-chip" data-city="${name}" data-q="Michelin star restaurants and fine dining" data-ch="michelin">⭐ ${name} Michelin Dining</button>
+      <button type="button" class="scout-chip" data-city="${name}" data-q="Eater 38 essential restaurants heatmap" data-ch="eater">🍴 ${name} Eater Heatmap</button>
+      <button type="button" class="scout-chip" data-city="${name}" data-q="best restaurants and bars Yelp top rated" data-ch="yelp">⭐ ${name} Yelp Best Rated</button>
+      <button type="button" class="scout-chip" data-city="${name}" data-q="city magazine best of dining nightlife guide" data-ch="magazines">📰 ${name} City Magazine Guide</button>
+      <button type="button" class="scout-chip" data-city="${name}" data-q="live music concerts gig guide" data-ch="music">🎵 ${name} Live Music</button>
+      <button type="button" class="scout-chip" data-city="${name}" data-q="Reddit hidden gems secret viewpoints" data-ch="reddit">💎 ${name} Gems</button>
+    `;
+  });
+
+  container.innerHTML = chipsHtml;
+
+  container.querySelectorAll(".scout-chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      const city = chip.dataset.city;
+      const q = chip.dataset.q;
+      const ch = chip.dataset.ch;
+      const btn = document.getElementById("runScoutBtn");
+      const chSelect = document.getElementById("scoutChannelSelect");
+      if (city && citySelect) citySelect.value = city;
+      if (q && queryInput) queryInput.value = q;
+      if (ch && chSelect) chSelect.value = ch;
+      if (btn) btn.click();
+    });
+  });
 }
 
 // 10. City-Scoped Live Web Scout & Daily Scanner
@@ -2067,7 +2162,8 @@ function initScout() {
       try {
         const res = await fetch("/api/search", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: getAuthHeaders({ "Content-Type": "application/json" }),
+          credentials: "include",
           body: JSON.stringify({
             city_name: city,
             query: q,
@@ -2081,9 +2177,11 @@ function initScout() {
         if (data.results.length === 0) {
           grid.innerHTML = `<p style="grid-column:1/-1; text-align:center; color:var(--text-muted); padding:2rem;">No live web results returned for '${escapeHtml(q)}'. Try other keywords.</p>`;
         } else {
-          grid.innerHTML = data.results.map(r => {
+          window._lastSearchResults = data.results;
+          grid.innerHTML = data.results.map((r, idx) => {
             const hasUrl = Boolean(r.url && r.url.trim() !== "");
-            const targetUrl = hasUrl ? r.url : `https://www.google.com/search?q=${encodeURIComponent(r.title + ' ' + city)}`;
+            const safeUrl = hasUrl ? sanitizeUrl(r.url) : "";
+            const targetUrl = safeUrl ? safeUrl : `https://www.google.com/search?q=${encodeURIComponent(r.title + ' ' + city)}`;
             const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.title + ' ' + (r.address || city))}`;
                 let pIcon = "🌐";
                 if (/eventbrite/i.test(r.source_platform)) pIcon = "🎟️";
@@ -2091,6 +2189,12 @@ function initScout() {
                 else if (/dice/i.test(r.source_platform)) pIcon = "🎲";
                 else if (/ticketmaster/i.test(r.source_platform)) pIcon = "🎫";
                 else if (/venue/i.test(r.source_platform)) pIcon = "🏛️";
+                else if (/yelp/i.test(r.source_platform)) pIcon = "⭐";
+                else if (/eater/i.test(r.source_platform)) pIcon = "🍴";
+                else if (/michelin/i.test(r.source_platform)) pIcon = "⭐";
+                else if (/brewery|beer/i.test(r.source_platform)) pIcon = "🍺";
+                else if (/cocktail|speakeasy/i.test(r.source_platform)) pIcon = "🍸";
+                else if (/magazine/i.test(r.source_platform)) pIcon = "📰";
                 else if (/reddit/i.test(r.source_platform)) pIcon = "💬";
                 else if (/tiktok/i.test(r.source_platform)) pIcon = "🎬";
 
@@ -2116,7 +2220,7 @@ function initScout() {
                   </a>
                 </div>
                 <div class="card-footer-actions">
-                  <button class="btn btn-primary btn-sm" onclick='addToWishlist(${JSON.stringify(r).replace(/'/g, "&apos;")})'>
+                  <button class="btn btn-primary btn-sm" onclick="addSearchResultToWishlist(${idx})">
                     ➕ Add to To-Do List
                   </button>
                 </div>
@@ -2130,19 +2234,6 @@ function initScout() {
       }
     });
   }
-
-  // Quick chips
-  document.querySelectorAll(".scout-chip").forEach(chip => {
-    chip.addEventListener("click", () => {
-      const city = chip.dataset.city;
-      const q = chip.dataset.q;
-      const ch = chip.dataset.ch;
-      if (city && citySelect) citySelect.value = city;
-      if (q && queryInput) queryInput.value = q;
-      if (ch && chSelect) chSelect.value = ch;
-      btn.click();
-    });
-  });
 
   // Daily Scan
   if (dailyBtn) {
@@ -2166,6 +2257,12 @@ function initScout() {
         alert("Scan error: " + err.message);
       }
     });
+  }
+}
+
+function addSearchResultToWishlist(index) {
+  if (window._lastSearchResults && window._lastSearchResults[index]) {
+    addToWishlist(window._lastSearchResults[index]);
   }
 }
 
@@ -2214,19 +2311,30 @@ async function addToWishlist(itemObj) {
   }
 }
 
-// 11. Multi-City Leaflet Map
+// 11. Multi-City Leaflet Map (Powered by OpenStreetMap - 100% Free, Zero API Key Required)
 function initMap() {
   const mapEl = document.getElementById("scoutMap");
   if (!mapEl || typeof L === "undefined") return;
 
+  // Determine initial center dynamically from current trip's cities
+  let initialCenter = [20.0, 0.0];
+  let initialZoom = 2;
+  if (currentTripData && currentTripData.cities && currentTripData.cities.length > 0) {
+    const firstValidCity = currentTripData.cities.find(c => c.lat && c.lon && (c.lat !== 0 || c.lon !== 0));
+    if (firstValidCity) {
+      initialCenter = [firstValidCity.lat, firstValidCity.lon];
+      initialZoom = 9;
+    }
+  }
+
   leafletMap = L.map("scoutMap", {
-    center: [39.5, -8.0], // Center on Portugal
-    zoom: 7,
+    center: initialCenter,
+    zoom: initialZoom,
   });
 
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains: "abcd",
+  // OpenStreetMap Tile Layer - 100% Free, Community-Hosted, No API Key Required
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors',
     maxZoom: 19
   }).addTo(leafletMap);
 
@@ -2357,6 +2465,13 @@ function fitMapBounds() {
   });
   if (bounds.length > 0) {
     leafletMap.fitBounds(L.latLngBounds(bounds), { padding: [40, 40], maxZoom: 14 });
+  } else if (currentTripData && currentTripData.cities && currentTripData.cities.length > 0) {
+    const validCities = currentTripData.cities.filter(c => c.lat && c.lon && (c.lat !== 0 || c.lon !== 0));
+    if (validCities.length > 1) {
+      leafletMap.fitBounds(L.latLngBounds(validCities.map(c => [c.lat, c.lon])), { padding: [40, 40], maxZoom: 12 });
+    } else if (validCities.length === 1) {
+      leafletMap.setView([validCities[0].lat, validCities[0].lon], 12);
+    }
   }
 }
 
@@ -2365,4 +2480,18 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, m => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
   })[m]);
+}
+
+function sanitizeUrl(rawUrl) {
+  if (!rawUrl) return "";
+  const trimmed = String(rawUrl).trim();
+  if (!trimmed) return "";
+  try {
+    if (/^(javascript|data|vbscript):/i.test(trimmed)) {
+      return "";
+    }
+    return trimmed;
+  } catch (e) {
+    return "";
+  }
 }

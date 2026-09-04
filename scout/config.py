@@ -53,9 +53,12 @@ CITY_PRESETS: Dict[str, Dict[str, Any]] = {
 
 CATEGORIES: Dict[str, Dict[str, str]] = {
     "dining": {"label": "Iconic Dining & Taverns", "icon": "🍽️", "color": "#fbbf24"},
+    "beer": {"label": "Breweries & Beer Tasting Rooms", "icon": "🍺", "color": "#f59e0b"},
+    "cocktails": {"label": "Craft Cocktails & Speakeasies", "icon": "🍸", "color": "#ec4899"},
+    "michelin": {"label": "Michelin Star & Fine Dining", "icon": "⭐", "color": "#eab308"},
     "wine": {"label": "Wine Cellars & Lodges", "icon": "🍷", "color": "#f43f5e"},
     "historic": {"label": "Castles & Historic Sights", "icon": "🏰", "color": "#38bdf8"},
-    "music": {"label": "Fado & Live Music", "icon": "🎶", "color": "#a855f7"},
+    "music": {"label": "Live Music & Gigs", "icon": "🎶", "color": "#a855f7"},
     "outdoors": {"label": "Miradouros & Trails", "icon": "🌊", "color": "#34d399"},
     "gems": {"label": "Local Neighborhood Gems", "icon": "💎", "color": "#e879f9"},
     "free": {"label": "Free Admission", "icon": "🎟️", "color": "#4ade80"},
@@ -63,11 +66,17 @@ CATEGORIES: Dict[str, Dict[str, str]] = {
 
 SEARCH_CHANNELS: Dict[str, Dict[str, str]] = {
     "all": {"label": "🌐 All Sources (Combined)", "badge": "All"},
+    "eater": {"label": "🍴 Eater.com Curated Heatmaps & Essential Guides", "badge": "Eater"},
+    "yelp": {"label": "⭐ Yelp Top Reviews & Local Ratings", "badge": "Yelp"},
+    "magazines": {"label": "📰 City Magazines & Local Lifestyle Press (TimeOut, Local Mags)", "badge": "City Mag"},
+    "breweries": {"label": "🍺 Craft Breweries & Beer Tasting Rooms", "badge": "Breweries"},
+    "cocktails": {"label": "🍸 Craft Cocktail Bars & Secret Speakeasies", "badge": "Speakeasies"},
+    "michelin": {"label": "⭐ Michelin Guide & Fine Dining", "badge": "Michelin"},
     "music": {"label": "🎵 Live Music & Tickets (Eventbrite, DICE, Songkick, Ticketmaster)", "badge": "Live Music"},
     "venues": {"label": "🏛️ Music Venues & Concert Halls", "badge": "Venues"},
     "guides": {"label": "📖 Travel Guides (Lonely Planet, TimeOut, Fodor's)", "badge": "Guides"},
-    "blogs": {"label": "✍️ Food & Culture Blogs (Eater, Local Blogs)", "badge": "Blogs"},
-    "reddit": {"label": "💬 Reddit Community Advice (r/lisboa, r/porto, r/portugal)", "badge": "Reddit"},
+    "blogs": {"label": "✍️ Food & Culture Blogs", "badge": "Blogs"},
+    "reddit": {"label": "💬 Reddit Community Advice & Hidden Gems", "badge": "Reddit"},
     "tiktok": {"label": "🎬 TikTok Viral Spots & Trends", "badge": "TikTok"},
     "social": {"label": "📱 Social Channels & Festival Calendars", "badge": "Social"},
 }

@@ -20,6 +20,7 @@ This comprehensive guide covers every feature of the platform, from your first l
 10. [Sharing & Multi-User Collaboration](#10-sharing--multi-user-collaboration)
 11. [Printing, PDF Export & Email/SMS Sharing](#11-printing-pdf-export--emailsms-sharing)
 12. [Frequently Asked Questions (FAQ)](#12-frequently-asked-questions-faq)
+13. [Security Architecture & Hardening](#13-security-architecture--hardening)
 
 ---
 
@@ -69,12 +70,16 @@ Every action on Travel Scout—adding venues, creating trips, or scheduling date
 
 ### 🗑️ Managing & Deleting Users
 - Click the user profile dropdown and select **"Manage Users / Delete Profiles"**.
-- View all registered accounts on the server.
-- Click the red **`🗑️ Delete`** button next to any test account to remove cached or temporary profiles. Active trip owners are protected against accidental deletion.
+- View all registered accounts on the server (requires authentication).
+- **Self-Deletion Security Policy:** Travelers can permanently delete their own account and all associated itineraries. To prevent account destruction by third parties, deleting someone else's account is strictly rejected with `HTTP 403 Forbidden`.
+- **Demo Accounts Cleanup:** Pre-seeded demo profiles (Larry Munroe and Sarah Chen) can be purged via the **"Purge Demo Accounts"** action by authorized accounts to deliver a clean workspace for production teams.
 
-### 🔒 User Privacy & Data Isolation
+### 🔒 User Privacy, Cryptographic Sessions & Data Isolation
 - **Private Workspaces:** Trips you create are owned by you. They remain invisible to other users unless you explicitly invite them.
 - **Strict Access Control:** Unauthorized attempts to access an unshared trip ID return `HTTP 403 Forbidden`.
+- **HMAC-SHA256 Signed Sessions:** Authentication uses cryptographically signed session tokens (`travel_scout_session`) verified on every request. Tampered or forged tokens are automatically rejected.
+- **Hardened Cookies:** Session cookies are set with `HttpOnly`, `SameSite: Lax`, and `Secure` on HTTPS, preventing credential theft via client-side JavaScript or cross-site request hijacking.
+- **OAuth 2.0 CSRF Protection:** Google OAuth login flows generate and enforce cryptographically random `state` tokens to prevent OAuth login CSRF attacks.
 
 ---
 
@@ -185,8 +190,14 @@ Every card in Explore & Discover features interactive clickable filter tags:
 
 Click the **`🔍 Scout & Discover`** tab or click **Scout City 🚀** to scan live web sources for real-time recommendations and concert dates.
 
-### Live Music & Ticketing Channels
-Travel Scout features dedicated live music and concert discovery across premier ticketing and venue platforms:
+### Live Web Channels & Discovery Sources
+Travel Scout features multi-channel web scouting across culinary, nightlife, and cultural platforms:
+- **`🍺 Craft Breweries & Beer Tasting Rooms`**: Local microbreweries, taprooms, alehouses, and tasting rooms.
+- **`🍸 Craft Cocktail Bars & Secret Speakeasies`**: Hidden lounges, mixology bars, and secret entrance speakeasies.
+- **`⭐ Michelin Guide & Fine Dining`**: Michelin-starred venues, Bib Gourmand awards, and chef's tasting menus.
+- **`🍴 Eater.com Heatmaps & Guides`**: Essential 38 heatmaps, critic maps, and newly opened hotspots.
+- **`⭐ Yelp Top Reviews & Ratings`**: Highly reviewed neighborhood dining, bars, and dessert spots.
+- **`📰 City Magazines & Local Press`**: Top editorial roundups from *TimeOut*, city lifestyle monthlies, and local food critics.
 - **`🎵 Live Music & Tickets`**: Actively scans:
   - 🎟️ **Eventbrite** (`eventbrite.com`)
   - 🎸 **Songkick** (`songkick.com`)
@@ -194,13 +205,12 @@ Travel Scout features dedicated live music and concert discovery across premier 
   - 🎫 **Ticketmaster** (`ticketmaster.com`)
 - **`🏛️ Music Venues & Concert Halls`**: Scans iconic music clubs, concert halls, jazz bars, and performance stages.
 - **`📖 Travel Guides`**: Editorial insights from *Lonely Planet*, *TimeOut*, and *Fodor's*.
-- **`✍️ Food & Culture Blogs`**: Critic reviews from *Eater* and local food writers.
-- **`💬 Reddit Communities`**: Insider threads from `r/lisboa`, `r/porto`, `r/portugal`, `r/solotravel`, and `r/washingtondc`.
+- **`💬 Reddit Communities`**: Insider threads, hidden gems, and traveler advice.
 - **`🎬 TikTok`**: Viral spots, hidden viewpoints, and video recommendations.
 
 ### ⚡ Autonomous Multi-City Daily Scanner
 - Click **`⚡ Run Daily Autonomous Scan (All Trip Cities)`**.
-- The engine runs a background sweep across all itinerary cities, checking live music tickets, tour dates, wine tastings, and Reddit hidden gems, automatically adding new finds to your To-Do wishlist.
+- The engine runs a background sweep across all itinerary cities, checking breweries, speakeasies, Michelin stars, live music tickets, tour dates, and Reddit hidden gems, automatically adding new finds to your To-Do wishlist.
 
 ---
 
@@ -226,8 +236,8 @@ Click the **`🗺️ Interactive Map`** tab for a visual overview of your journe
 
 ### Managing Collaborators
 - View all active collaborators under **Active Contributors**.
-- Click **`🗑️ Remove`** next to any collaborator to revoke their access.
-- The original **Trip Owner** is protected with a gold crown tag (`👑 Trip Owner`) and cannot be removed.
+- **Owner-Controlled Access:** Only the original **Trip Owner** (`👑 Trip Owner`) can invite collaborators or revoke access. Collaborators can also remove themselves from a shared journey.
+- The original **Trip Owner** is protected with a gold crown tag and cannot be removed.
 
 ---
 
@@ -262,3 +272,44 @@ Click **`🖨️ Print / Export`** in the header or on the Itinerary toolbar.
 
 #### Q: Can companions collaborate without logging in with Google?
 **A:** Yes! Companions can use the **Switch Account** dropdown or type their name and email into the sign-in modal to immediately collaborate.
+
+---
+
+## 13. Security Architecture & Hardening
+
+Travel Scout incorporates defense-in-depth security controls based on OWASP Top 10 recommendations:
+
+### 🛡️ Core Security Controls
+1. **Cryptographic Session Authentication (CWE-287 / CWE-306):**
+   - Session identifiers are signed with HMAC-SHA256 (`sign_session_token`, `verify_session_token`).
+   - Sessions are bound to `travel_scout_session` cookies configured with `HttpOnly: true`, `SameSite: lax`, and `Secure` (over HTTPS).
+   - Unauthenticated header-based identity spoofing is eliminated in production.
+2. **Strict Authorization & Object-Level Isolation (BOLA / IDOR - CWE-639):**
+   - Multi-hotel accommodations (`/api/trips/{trip_id}/cities/{city_id}/stays`) and stay deletions (`/api/trips/{trip_id}/stays/{stay_id}`) strictly verify parent trip and city segment ownership before executing modifications.
+   - User account deletion is restricted to self-deletion.
+3. **Cross-Site Scripting (XSS) Defense (CWE-79):**
+   - Backend validation in Pydantic models (`AddItemPayload`, `UpdateItemPayload`) enforces strict URL scheme checking, rejecting dangerous schemes like `javascript:`, `data:`, or `vbscript:`.
+   - Client-side sanitization (`sanitizeUrl`) neutralizes unvetted URLs before injecting into DOM anchor links.
+   - Dynamic search result cards use safe event indexing (`addSearchResultToWishlist(index)`) rather than inline JSON evaluation.
+4. **OAuth 2.0 CSRF Protection (CWE-352):**
+   - Implements unique, time-bound `state` tokens stored in ephemeral HttpOnly cookies during Google Sign-In, verified upon callback to prevent login CSRF.
+5. **OWASP HTTP Security Headers (CWE-1021 / CWE-693):**
+   - `X-Frame-Options: SAMEORIGIN` (prevents clickjacking and UI redressing)
+   - `X-Content-Type-Options: nosniff` (prevents MIME type confusion)
+   - `Referrer-Policy: strict-origin-when-cross-origin` (prevents sensitive path / token leakage)
+   - `Permissions-Policy: geolocation=(), microphone=(), camera=()` (disables unused hardware APIs)
+   - `Strict-Transport-Security: max-age=31536000; includeSubDomains` (enforces HTTPS on production)
+
+### ⚙️ Environment Configuration Variables
+
+| Variable | Required | Description | Default |
+|---|---|---|---|
+| `SESSION_SECRET` | Recommended | Secret key for signing HMAC session tokens. Auto-generated to `.session_secret` if omitted. | Auto-generated |
+| `ENVIRONMENT` | Optional | Runtime environment mode (`development`, `production`). In production, dev-login is disabled. | `development` |
+| `ENABLE_DEV_LOGIN` | Optional | Set to `true` to force-enable developer instant login in production environments. | `false` |
+| `ALLOWED_HOSTS` | Optional | Comma-separated list of permitted host headers to prevent reverse proxy cache poisoning. | `*` |
+| `BASE_URL` | Optional | Explicit public reverse proxy URL (e.g. `https://travel-scout.onrender.com`). | Auto-detected |
+| `GOOGLE_CLIENT_ID` | Optional | Google OAuth 2.0 client ID from Google Cloud Console. | None |
+| `GOOGLE_CLIENT_SECRET` | Optional | Google OAuth 2.0 client secret. | None |
+| `DATABASE_URL` | Optional | SQLAlchemy database connection URI (PostgreSQL or SQLite). | `sqlite:///travel_scout.db` |
+| `DISABLE_DEMO_SEED` | Optional | Set to `true` to disable seeding default demo trip data on clean database initialization. | `false` |
