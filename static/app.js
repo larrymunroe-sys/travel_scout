@@ -1068,7 +1068,8 @@ function generateFormattedItineraryText(mode = "email") {
       });
     }
 
-    lines.push(`\nShared via Travel Scout: http://127.0.0.1:8000`);
+    const origin = (typeof window !== "undefined" && window.location?.origin) ? window.location.origin : "http://127.0.0.1:8000";
+    lines.push(`\nShared via Travel Scout: ${origin}`);
     return lines.join("\n");
   }
 
@@ -1143,7 +1144,8 @@ function generateFormattedItineraryText(mode = "email") {
     lines.push("");
   }
 
-  lines.push(`\nGenerated with Travel Scout (http://127.0.0.1:8000)`);
+  const origin = (typeof window !== "undefined" && window.location?.origin) ? window.location.origin : "http://127.0.0.1:8000";
+  lines.push(`\nGenerated with Travel Scout (${origin})`);
   return lines.join("\n");
 }
 

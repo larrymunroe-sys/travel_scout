@@ -1,4 +1,4 @@
-"""Entry point for Multi-City Collaborative Travel Scout Platform."""
+import os
 import sys
 import socket
 import argparse
@@ -23,8 +23,17 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
-def run_web(host: str = "127.0.0.1", port: int = 8000):
-    chosen_port = find_available_port(host, port)
+def run_web(host: str = None, port: int = None):
+    if not host:
+        host = os.environ.get("HOST", "0.0.0.0" if os.environ.get("PORT") else "127.0.0.1")
+    if not port:
+        port = int(os.environ.get("PORT", 8000))
+
+    if os.environ.get("PORT"):
+        chosen_port = port
+    else:
+        chosen_port = find_available_port(host, port)
+
     print("=" * 65)
     print("Multi-City Collaborative Travel Scout Agent")
     print("Pre-Seeded Journey: Lisbon -> Porto -> Braganca")
@@ -52,8 +61,8 @@ def main():
     subparsers = parser.add_subparsers(dest="command")
 
     web_p = subparsers.add_parser("web", help="Start FastAPI web dashboard")
-    web_p.add_argument("--host", default="127.0.0.1")
-    web_p.add_argument("--port", type=int, default=8000)
+    web_p.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0" if os.environ.get("PORT") else "127.0.0.1"))
+    web_p.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8000)))
 
     subparsers.add_parser("scan", help="Run multi-city autonomous scan")
 
@@ -62,8 +71,8 @@ def main():
     if args.command == "scan":
         run_scan()
     else:
-        host = getattr(args, "host", "127.0.0.1")
-        port = getattr(args, "port", 8001)
+        host = getattr(args, "host", None)
+        port = getattr(args, "port", None)
         run_web(host, port)
 
 if __name__ == "__main__":
