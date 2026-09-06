@@ -668,7 +668,9 @@ function renderCitiesTab() {
     return;
   }
 
-  container.innerHTML = currentTripData.cities.map(city => `
+  container.innerHTML = currentTripData.cities.map(city => {
+    const cityNow = (currentTripData.weather && currentTripData.weather._current) ? currentTripData.weather._current[city.city_name] : null;
+    return `
     <div class="city-card">
       <div class="city-card-header">
         <div class="city-card-title-group">
@@ -676,6 +678,13 @@ function renderCitiesTab() {
           <div>
             <div class="city-name">${escapeHtml(city.city_name)}, <span style="color:var(--text-muted); font-size:1rem; font-weight:400;">${escapeHtml(city.country)}</span></div>
             <div class="city-dates">📅 ${city.start_date} &rarr; ${city.end_date}</div>
+            ${cityNow ? `
+              <div style="display:inline-flex; align-items:center; gap:0.35rem; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); border-radius:999px; padding:0.18rem 0.55rem; font-size:0.75rem; margin-top:0.35rem;" title="Current live weather in ${escapeHtml(city.city_name)}">
+                <span>${cityNow.icon}</span>
+                <span style="font-weight:700; color:#38bdf8;">${Math.round(cityNow.temp_f)}&deg;F</span>
+                <span style="color:var(--text-muted); font-size:0.72rem;">${escapeHtml(cityNow.condition)} (Live Now)</span>
+              </div>
+            ` : ''}
           </div>
         </div>
         <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
@@ -719,7 +728,8 @@ function renderCitiesTab() {
         `).join("")}
       </div>
     </div>
-  `).join("");
+  `;
+  }).join("");
 }
 
 // 6. Render Collaborative Itinerary Tab
@@ -759,6 +769,7 @@ function renderItineraryTab() {
 
     const dayCity = (dayItems.length > 0 && dayItems[0].city_name && dayItems[0].city_name !== "Universal") ? dayItems[0].city_name : null;
     const weather = (currentTripData.weather && currentTripData.weather[day.date]) ? currentTripData.weather[day.date] : null;
+    const cityNow = (dayCity && currentTripData.weather && currentTripData.weather._current) ? currentTripData.weather._current[dayCity] : null;
 
     return `
       <div class="day-block">
@@ -772,7 +783,13 @@ function renderItineraryTab() {
               <span style="color:#94a3b8; font-size:0.7rem;">${escapeHtml(weather.condition)}</span>
               ${weather.precipitation_probability_max > 20 ? `<span style="color:#38bdf8; font-size:0.7rem;">💧 ${weather.precipitation_probability_max}%</span>` : ''}
             </span>
-          ` : ''}
+          ` : (cityNow ? `
+            <span class="badge" title="Live current weather in ${escapeHtml(dayCity)}. Day-specific forecasts appear 14 days prior to departure." style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); color:var(--text-main); font-size:0.75rem; display:inline-flex; align-items:center; gap:0.35rem; padding:0.2rem 0.55rem; border-radius:999px;">
+              <span>${cityNow.icon}</span>
+              <span style="font-weight:600;">${Math.round(cityNow.temp_f)}&deg;F</span>
+              <span style="color:#94a3b8; font-size:0.7rem;">${escapeHtml(cityNow.condition)} (Live Now)</span>
+            </span>
+          ` : '')}
           ${dayCity ? `
             <button type="button" class="btn btn-secondary btn-sm" style="margin-left:auto; padding:0.2rem 0.55rem; font-size:0.75rem;" onclick="jumpToScoutCity('${escapeHtml(dayCity)}')">
               🌐 Scout ${escapeHtml(dayCity)} 🚀

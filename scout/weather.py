@@ -47,7 +47,7 @@ def fetch_open_meteo_forecast(lat: float, lon: float, days: int = 14) -> Dict[st
 
     url = (
         f"https://api.open-meteo.com/v1/forecast?"
-        f"latitude={lat}&longitude={lon}&daily="
+        f"latitude={lat}&longitude={lon}&current_weather=true&daily="
         f"weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum&"
         f"timezone=auto&forecast_days={days}"
     )
@@ -68,6 +68,22 @@ def fetch_open_meteo_forecast(lat: float, lon: float, days: int = 14) -> Dict[st
                 rain_probs = daily.get("precipitation_probability_max", [])
 
                 result_by_date = {}
+
+                curr_data = data.get("current_weather", {})
+                curr_temp_c = curr_data.get("temperature")
+                curr_code = curr_data.get("weathercode", 0)
+                curr_mapping = WMO_WEATHER_MAP.get(curr_code, {"icon": "🌤️", "condition": "Fair", "rain_risk": False})
+                curr_temp_f = round((curr_temp_c * 9/5) + 32, 1) if curr_temp_c is not None else None
+                result_by_date["_current"] = {
+                    "temp_c": curr_temp_c,
+                    "temp_f": curr_temp_f,
+                    "weather_code": curr_code,
+                    "icon": curr_mapping["icon"],
+                    "condition": curr_mapping["condition"],
+                    "wind_speed": curr_data.get("windspeed"),
+                    "time": curr_data.get("time")
+                }
+
                 for idx, dt in enumerate(dates):
                     code = codes[idx] if idx < len(codes) else 0
                     mapping = WMO_WEATHER_MAP.get(code, {"icon": "🌤️", "condition": "Fair", "rain_risk": False})
@@ -113,14 +129,22 @@ def fetch_open_meteo_forecast(lat: float, lon: float, days: int = 14) -> Dict[st
 def get_trip_weather(city_segments: List[Any]) -> Dict[str, Any]:
     """Build a consolidated date-keyed weather lookup across all trip destination stops."""
     consolidated: Dict[str, Any] = {}
+    current_by_city: Dict[str, Any] = {}
 
     for city in city_segments:
         if city.lat and city.lon:
             forecast = fetch_open_meteo_forecast(city.lat, city.lon)
+            if "_current" in forecast:
+                curr_copy = dict(forecast["_current"])
+                curr_copy["city_name"] = city.city_name
+                current_by_city[city.city_name] = curr_copy
             for dt, w_info in forecast.items():
+                if dt == "_current":
+                    continue
                 if dt not in consolidated:
                     info_copy = dict(w_info)
                     info_copy["city_name"] = city.city_name
                     consolidated[dt] = info_copy
 
+    consolidated["_current"] = current_by_city
     return consolidated
