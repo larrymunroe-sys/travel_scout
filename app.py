@@ -14,7 +14,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Red
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, field_validator
-from sqlalchemy import or_
+import re
+from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 
 from database.connection import init_db, get_db, SessionLocal
@@ -288,6 +289,7 @@ class AddStayPayload(BaseModel):
 
 class AddItemPayload(BaseModel):
     city_segment_id: Optional[str] = None
+    city_name: Optional[str] = None
     title: str
     category: str = "gems"
     neighborhood: Optional[str] = None
@@ -811,6 +813,43 @@ async def get_trip_details(trip_id: str, request: Request, db: Session = Depends
             "is_owner": (u.id == trip.owner_id)
         })
 
+    # Ensure any items without city segments are linked to matching trip city segments
+    unlinked_items = [it for it in trip.items if not it.city_segment_id]
+    if unlinked_items:
+        existing_city_map = {c.city_name.lower(): c for c in trip.city_segments}
+        modified_db = False
+        for it in unlinked_items:
+            addr = f"{it.address or ''} {it.neighborhood or ''} {it.title}"
+            detected_city = None
+            if re.search(r"washington|dc\s*\d{5}|capitol hill|georgetown|tidal basin", addr, re.I):
+                detected_city = "Washington, D.C."
+            elif re.search(r"lisbo|belém|alfama", addr, re.I):
+                detected_city = "Lisbon"
+            elif re.search(r"porto|gaia", addr, re.I):
+                detected_city = "Porto"
+            elif re.search(r"bragan[çc]a", addr, re.I):
+                detected_city = "Bragança"
+
+            if detected_city:
+                matched_seg = existing_city_map.get(detected_city.lower())
+                if not matched_seg:
+                    matched_seg = scout_engine.add_city(
+                        db=db,
+                        trip_id=trip.id,
+                        city_name=detected_city,
+                        country="United States" if "Washington" in detected_city else "Portugal",
+                        start_date=trip.city_segments[0].start_date if trip.city_segments else "2027-04-06",
+                        end_date=trip.city_segments[0].end_date if trip.city_segments else "2027-04-13",
+                        hotel_name="",
+                        hotel_address=""
+                    )
+                    existing_city_map[detected_city.lower()] = matched_seg
+                it.city_segment_id = matched_seg.id
+                modified_db = True
+        if modified_db:
+            db.commit()
+            db.refresh(trip)
+
     # 2. Format Cities & Stays
     cities = []
     all_dates = set()
@@ -923,11 +962,25 @@ async def get_trip_details(trip_id: str, request: Request, db: Session = Depends
 
         note_date_str = item.note_updated_at.strftime("%b %d, %Y, %I:%M %p") if item.note_updated_at else None
 
+        city_name_val = seg.city_name if seg else None
+        if not city_name_val:
+            addr = f"{item.address or ''} {item.neighborhood or ''} {item.title}"
+            if re.search(r"washington|dc\s*\d{5}|capitol hill|georgetown|tidal basin", addr, re.I):
+                city_name_val = "Washington, D.C."
+            elif re.search(r"lisbo|belém|alfama", addr, re.I):
+                city_name_val = "Lisbon"
+            elif re.search(r"porto|gaia", addr, re.I):
+                city_name_val = "Porto"
+            elif re.search(r"bragan[çc]a", addr, re.I):
+                city_name_val = "Bragança"
+            else:
+                city_name_val = "Universal"
+
         item_dict = {
             "id": item.id,
             "trip_id": item.trip_id,
             "city_id": seg.id if seg else None,
-            "city_name": seg.city_name if seg else "Universal",
+            "city_name": city_name_val,
             "title": item.title,
             "category": item.category,
             "neighborhood": item.neighborhood,
@@ -1252,10 +1305,43 @@ async def add_itinerary_item(
     db: Session = Depends(get_db)
 ):
     user = get_current_user(request, db)
-    check_trip_access(trip_id, user, db, require_edit=True)
+    trip = check_trip_access(trip_id, user, db, require_edit=True)
+
+    city_seg_id = payload.city_segment_id
+    if not city_seg_id:
+        c_name = payload.city_name
+        if not c_name and payload.address:
+            addr = f"{payload.address} {payload.neighborhood or ''} {payload.title}"
+            if re.search(r"washington|dc\s*\d{5}|capitol hill|georgetown|tidal basin", addr, re.I):
+                c_name = "Washington, D.C."
+            elif re.search(r"lisbo|belém|alfama", addr, re.I):
+                c_name = "Lisbon"
+            elif re.search(r"porto|gaia", addr, re.I):
+                c_name = "Porto"
+            elif re.search(r"bragan[çc]a", addr, re.I):
+                c_name = "Bragança"
+
+        if c_name:
+            matched_seg = db.query(CitySegment).filter(
+                CitySegment.trip_id == trip_id,
+                func.lower(CitySegment.city_name) == c_name.strip().lower()
+            ).first()
+            if not matched_seg:
+                matched_seg = scout_engine.add_city(
+                    db=db,
+                    trip_id=trip_id,
+                    city_name=c_name.strip(),
+                    country="United States" if "Washington" in c_name else "Portugal",
+                    start_date=trip.city_segments[0].start_date if trip.city_segments else "2027-04-06",
+                    end_date=trip.city_segments[0].end_date if trip.city_segments else "2027-04-13",
+                    hotel_name="",
+                    hotel_address=""
+                )
+            city_seg_id = matched_seg.id
+
     item = ItineraryItem(
         trip_id=trip_id,
-        city_segment_id=payload.city_segment_id,
+        city_segment_id=city_seg_id,
         title=payload.title,
         category=payload.category,
         neighborhood=payload.neighborhood,

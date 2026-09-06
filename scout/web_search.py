@@ -172,6 +172,7 @@ def live_city_search(
 
         results.append({
             "title": clean_title,
+            "city_name": city_name,
             "category": cat,
             "neighborhood": f"{city_name} Cultural District",
             "address": f"{city_name}",

@@ -58,6 +58,10 @@ function initTabs() {
       const section = document.getElementById(`tab-${target}`);
       if (section) section.classList.add("active");
 
+      if (target === "scout") {
+        syncScoutCityWithItinerary();
+      }
+
       if (target === "map") {
         setTimeout(() => {
           if (leafletMap) {
@@ -655,7 +659,10 @@ function renderCitiesTab() {
             <div class="city-dates">📅 ${city.start_date} &rarr; ${city.end_date}</div>
           </div>
         </div>
-        <div style="display:flex; gap:0.5rem;">
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" onclick="jumpToScoutCity('${escapeHtml(city.city_name)}')">
+            🌐 Scout City 🚀
+          </button>
           <button class="btn btn-secondary btn-sm" onclick="openAddStayModal('${city.id}', '${escapeHtml(city.city_name)}')">
             🏨 Add Hotel by Date
           </button>
@@ -731,11 +738,18 @@ function renderItineraryTab() {
 
     if (cityFilter !== "all" && dayItems.length === 0) return "";
 
+    const dayCity = (dayItems.length > 0 && dayItems[0].city_name && dayItems[0].city_name !== "Universal") ? dayItems[0].city_name : null;
+
     return `
       <div class="day-block">
-        <div class="day-header">
-          <div class="day-title">📅 Date: <strong>${day.date}</strong></div>
+        <div class="day-header" style="flex-wrap:wrap; gap:0.5rem; align-items:center;">
+          <div class="day-title">📅 Date: <strong>${day.date}</strong> ${dayCity ? `&bull; <span style="color:#38bdf8; font-weight:600;">🏙️ ${escapeHtml(dayCity)}</span>` : ''}</div>
           <span class="badge" style="background:rgba(56,189,248,0.15); color:#38bdf8;">${dayItems.length} Stops</span>
+          ${dayCity ? `
+            <button type="button" class="btn btn-secondary btn-sm" style="margin-left:auto; padding:0.2rem 0.55rem; font-size:0.75rem;" onclick="jumpToScoutCity('${escapeHtml(dayCity)}')">
+              🌐 Scout ${escapeHtml(dayCity)} 🚀
+            </button>
+          ` : ''}
         </div>
         ${dayItems.length === 0 ? `
           <p style="color:var(--text-muted); font-size:0.85rem; padding:1rem 0;">No stops scheduled for this day yet. Select a date from To-Do above!</p>
@@ -2055,6 +2069,75 @@ function openAddStayModal(cityId, cityName) {
   modal.style.display = "flex";
 }
 
+// Helper to get all cities present across the itinerary and destination segments
+function getTripItineraryCities() {
+  if (!currentTripData) return [];
+  const cityMap = new Map();
+
+  // 1. From Destination Cities (city_segments)
+  (currentTripData.cities || []).forEach(c => {
+    if (c.city_name && c.city_name.trim()) {
+      const norm = c.city_name.trim();
+      if (!cityMap.has(norm.toLowerCase())) {
+        cityMap.set(norm.toLowerCase(), {
+          id: c.id,
+          city_name: norm,
+          country: c.country || ""
+        });
+      }
+    }
+  });
+
+  // 2. From all itinerary items (so Scout cities always align with any city on the itinerary)
+  (currentTripData.all_items || []).forEach(it => {
+    if (it.city_name && it.city_name !== "Universal" && it.city_name.trim()) {
+      const norm = it.city_name.trim();
+      if (!cityMap.has(norm.toLowerCase())) {
+        cityMap.set(norm.toLowerCase(), {
+          id: it.city_segment_id || it.city_id || norm,
+          city_name: norm,
+          country: ""
+        });
+      }
+    }
+  });
+
+  return Array.from(cityMap.values());
+}
+
+function syncScoutCityWithItinerary() {
+  const itinSelect = document.getElementById("itineraryCityFilter");
+  const scoutSelect = document.getElementById("scoutTargetCity");
+  if (!itinSelect || !scoutSelect || !currentTripData) return;
+
+  const cities = getTripItineraryCities();
+  if (itinSelect.value && itinSelect.value !== "all") {
+    const matched = cities.find(c => c.id === itinSelect.value);
+    if (matched) {
+      scoutSelect.value = matched.city_name;
+      renderScoutSuggestions();
+    }
+  }
+}
+
+window.jumpToScoutCity = function(cityName) {
+  if (!cityName) return;
+  const scoutSelect = document.getElementById("scoutTargetCity");
+  if (scoutSelect) {
+    const options = Array.from(scoutSelect.options).map(o => o.value);
+    if (!options.includes(cityName)) {
+      const opt = document.createElement("option");
+      opt.value = cityName;
+      opt.textContent = `🏙️ ${cityName}`;
+      scoutSelect.appendChild(opt);
+    }
+    scoutSelect.value = cityName;
+    renderScoutSuggestions();
+  }
+  const scoutTab = document.querySelector('.nav-tab[data-tab="scout"]');
+  if (scoutTab) scoutTab.click();
+};
+
 // 9. Dropdown helpers
 function populateCityDropdowns() {
   const itinSelect = document.getElementById("itineraryCityFilter");
@@ -2063,21 +2146,27 @@ function populateCityDropdowns() {
 
   if (!currentTripData) return;
 
-  const cities = currentTripData.cities || [];
+  const cities = getTripItineraryCities();
 
   if (itinSelect) {
     const prev = itinSelect.value;
     itinSelect.innerHTML = `<option value="all">🌐 All Cities (Unified Timeline)</option>` +
       cities.map(c => `<option value="${c.id}">${escapeHtml(c.city_name)}</option>`).join("");
     itinSelect.value = prev || "all";
-    itinSelect.onchange = () => renderItineraryTab();
+    itinSelect.onchange = () => {
+      renderItineraryTab();
+      syncScoutCityWithItinerary();
+    };
   }
 
   if (scoutSelect) {
     const prev = scoutSelect.value;
     scoutSelect.innerHTML = cities.map(c => `<option value="${escapeHtml(c.city_name)}">🏙️ ${escapeHtml(c.city_name)}</option>`).join("");
-    if (prev && cities.some(c => c.city_name === prev)) {
+    if (prev && cities.some(c => c.city_name.toLowerCase() === prev.toLowerCase())) {
       scoutSelect.value = prev;
+    } else if (itinSelect && itinSelect.value !== "all") {
+      const focusedCity = cities.find(c => c.id === itinSelect.value);
+      if (focusedCity) scoutSelect.value = focusedCity.city_name;
     }
     scoutSelect.onchange = () => renderScoutSuggestions();
   }
@@ -2096,7 +2185,7 @@ function renderScoutSuggestions() {
   const queryInput = document.getElementById("scoutQueryInput");
   if (!container) return;
 
-  const cities = (currentTripData && currentTripData.cities) ? currentTripData.cities : [];
+  const cities = getTripItineraryCities();
   if (cities.length === 0) {
     container.innerHTML = `<span style="font-size:0.8rem; color:var(--text-muted);">Add destination cities to your journey to see tailored live scout suggestions.</span>`;
     return;
@@ -2271,13 +2360,15 @@ async function addToWishlist(itemObj) {
     // Find city ID
     let cityId = null;
     if (currentTripData) {
-      const foundCity = currentTripData.cities.find(c => c.city_name.toLowerCase() === (itemObj.city_name || "").toLowerCase());
+      const allCities = getTripItineraryCities();
+      const foundCity = allCities.find(c => c.city_name.toLowerCase() === (itemObj.city_name || "").toLowerCase());
       if (foundCity) cityId = foundCity.id;
-      else if (currentTripData.cities.length > 0) cityId = currentTripData.cities[0].id;
+      else if (currentTripData.cities && currentTripData.cities.length > 0) cityId = currentTripData.cities[0].id;
     }
 
     const payload = {
       city_segment_id: cityId,
+      city_name: itemObj.city_name,
       title: itemObj.title,
       category: itemObj.category || "gems",
       neighborhood: itemObj.neighborhood,
