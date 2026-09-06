@@ -46,6 +46,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   initTabs();
   initModals();
+  initAddItemModal();
   initExpenseTracker();
   initBookingModal();
   initCalendarExport();
@@ -753,7 +754,7 @@ function renderItineraryTab() {
   if (todoBadge) todoBadge.textContent = `${filteredTodo.length} Items`;
 
   if (filteredTodo.length === 0) {
-    todoGrid.innerHTML = `<p style="grid-column:1/-1; color:var(--text-muted); font-size:0.85rem; text-align:center; padding:1.5rem 0;">No unscheduled items in this city. Scout new places or assign dates below!</p>`;
+    todoGrid.innerHTML = `<p style="grid-column:1/-1; color:var(--text-muted); font-size:0.85rem; text-align:center; padding:1.5rem 0;">No unscheduled items in this city. <button type="button" class="btn btn-secondary btn-sm" style="margin-left:0.5rem; font-size:0.75rem; padding:0.2rem 0.5rem;" onclick="openAddItemModal('todo')">➕ Add Wishlist Card</button> or scout new places below!</p>`;
   } else {
     todoGrid.innerHTML = filteredTodo.map(it => renderCard(it, availDates)).join("");
   }
@@ -790,11 +791,16 @@ function renderItineraryTab() {
               <span style="color:#94a3b8; font-size:0.7rem;">${escapeHtml(cityNow.condition)} (Live Now)</span>
             </span>
           ` : '')}
-          ${dayCity ? `
-            <button type="button" class="btn btn-secondary btn-sm" style="margin-left:auto; padding:0.2rem 0.55rem; font-size:0.75rem;" onclick="jumpToScoutCity('${escapeHtml(dayCity)}')">
-              🌐 Scout ${escapeHtml(dayCity)} 🚀
+          <div style="display:flex; gap:0.4rem; align-items:center; margin-left:auto;">
+            <button type="button" class="btn btn-primary btn-sm" style="padding:0.2rem 0.55rem; font-size:0.75rem;" onclick="openAddItemModal('${day.date}', '${escapeHtml(dayCity || '')}')" title="Add a custom stop or card to this date">
+              ➕ Add Stop
             </button>
-          ` : ''}
+            ${dayCity ? `
+              <button type="button" class="btn btn-secondary btn-sm" style="padding:0.2rem 0.55rem; font-size:0.75rem;" onclick="jumpToScoutCity('${escapeHtml(dayCity)}')">
+                🌐 Scout ${escapeHtml(dayCity)} 🚀
+              </button>
+            ` : ''}
+          </div>
         </div>
         ${weather && weather.is_rainy ? `
           <div style="background:rgba(56,189,248,0.1); border:1px solid rgba(56,189,248,0.3); color:#bae6fd; border-radius:6px; padding:0.45rem 0.75rem; font-size:0.8rem; margin:0.4rem 0 0.6rem 0; display:flex; align-items:center; gap:0.5rem;">
@@ -803,7 +809,12 @@ function renderItineraryTab() {
           </div>
         ` : ''}
         ${dayItems.length === 0 ? `
-          <p style="color:var(--text-muted); font-size:0.85rem; padding:1rem 0;">No stops scheduled for this day yet. Select a date from To-Do above!</p>
+          <div style="color:var(--text-muted); font-size:0.85rem; padding:1.2rem 0; text-align:center; background:rgba(255,255,255,0.02); border-radius:8px; border:1px dashed var(--border);">
+            No stops scheduled for this day yet.
+            <button type="button" class="btn btn-secondary btn-sm" style="margin-left:0.5rem; font-size:0.75rem; padding:0.22rem 0.55rem;" onclick="openAddItemModal('${day.date}', '${escapeHtml(dayCity || '')}')">
+              ➕ Add Stop to this Day
+            </button>
+          </div>
         ` : `
           <div class="cards-grid">
             ${dayItems.map(it => renderCard(it, availDates)).join("")}
@@ -3215,6 +3226,142 @@ function initCalendarExport() {
         return;
       }
       window.location.href = `/api/trips/${currentTripId}/export/calendar.ics`;
+    });
+  }
+}
+
+// 15. Manual Itinerary Card Creation Modal
+window.openAddItemModal = function(preselectedDate = "todo", preselectedCity = null) {
+  const modal = document.getElementById("addItemModal");
+  if (!modal) return;
+
+  // Populate cities dropdown
+  const citySelect = document.getElementById("manualItemCity");
+  if (citySelect) {
+    const cities = (currentTripData && currentTripData.cities) ? currentTripData.cities : [];
+    if (cities.length === 0) {
+      citySelect.innerHTML = `<option value="">General Trip</option>`;
+    } else {
+      citySelect.innerHTML = cities.map(c => `
+        <option value="${c.id}" ${preselectedCity && (c.city_name.toLowerCase() === preselectedCity.toLowerCase() || c.id === preselectedCity) ? 'selected' : ''}>
+          ${escapeHtml(c.city_name)} (${escapeHtml(c.country || 'Region')})
+        </option>
+      `).join("");
+    }
+  }
+
+  // Populate dates dropdown
+  const dateSelect = document.getElementById("manualItemDate");
+  if (dateSelect) {
+    const availDates = (currentTripData && currentTripData.available_dates) ? currentTripData.available_dates : [];
+    dateSelect.innerHTML = `
+      <option value="todo" ${preselectedDate === 'todo' || !preselectedDate ? 'selected' : ''}>📋 To-Do / Bucket List (Unscheduled)</option>
+      ${availDates.map(d => `
+        <option value="${d}" ${preselectedDate === d ? 'selected' : ''}>📅 ${d}</option>
+      `).join("")}
+    `;
+  }
+
+  // Clear / reset inputs
+  const titleInput = document.getElementById("manualItemTitle");
+  if (titleInput) titleInput.value = "";
+  const costInput = document.getElementById("manualItemCost");
+  if (costInput) costInput.value = "Free";
+  const neighInput = document.getElementById("manualItemNeighborhood");
+  if (neighInput) neighInput.value = "";
+  const addrInput = document.getElementById("manualItemAddress");
+  if (addrInput) addrInput.value = "";
+  const urlInput = document.getElementById("manualItemUrl");
+  if (urlInput) urlInput.value = "";
+  const statusSelect = document.getElementById("manualItemBookingStatus");
+  if (statusSelect) statusSelect.value = "unbooked";
+  const refInput = document.getElementById("manualItemBookingRef");
+  if (refInput) refInput.value = "";
+  const hlInput = document.getElementById("manualItemHighlight");
+  if (hlInput) hlInput.value = "";
+
+  modal.style.display = "flex";
+  if (titleInput) {
+    setTimeout(() => titleInput.focus(), 80);
+  }
+};
+
+function initAddItemModal() {
+  const modal = document.getElementById("addItemModal");
+  const openBtn = document.getElementById("openAddItemBtn");
+  const closeBtn = document.getElementById("closeAddItemBtn");
+  const cancelBtn = document.getElementById("cancelAddItemBtn");
+  const form = document.getElementById("addItemForm");
+
+  if (openBtn) {
+    openBtn.addEventListener("click", () => {
+      openAddItemModal("todo");
+    });
+  }
+  if (closeBtn) closeBtn.addEventListener("click", () => modal.style.display = "none");
+  if (cancelBtn) cancelBtn.addEventListener("click", () => modal.style.display = "none");
+
+  if (form) {
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!currentTripId) {
+        alert("Please select or create an itinerary first.");
+        return;
+      }
+
+      const title = document.getElementById("manualItemTitle").value.trim();
+      if (!title) {
+        alert("Please enter an activity or venue title.");
+        return;
+      }
+
+      const citySegmentId = document.getElementById("manualItemCity")?.value || null;
+      const category = document.getElementById("manualItemCategory")?.value || "gems";
+      const assignedDate = document.getElementById("manualItemDate")?.value || "todo";
+      const cost = document.getElementById("manualItemCost")?.value.trim() || "Free";
+      const neighborhood = document.getElementById("manualItemNeighborhood")?.value.trim() || null;
+      const address = document.getElementById("manualItemAddress")?.value.trim() || null;
+      const url = document.getElementById("manualItemUrl")?.value.trim() || null;
+      const bookingStatus = document.getElementById("manualItemBookingStatus")?.value || "unbooked";
+      const bookingRef = document.getElementById("manualItemBookingRef")?.value.trim() || null;
+      const highlight = document.getElementById("manualItemHighlight")?.value.trim() || null;
+
+      const payload = {
+        title,
+        city_segment_id: citySegmentId,
+        category,
+        assigned_date: assignedDate,
+        cost,
+        is_free: cost.toLowerCase() === "free" || cost === "$0" || cost === "0",
+        neighborhood,
+        address,
+        url,
+        booking_status: bookingStatus,
+        booking_ref: bookingRef,
+        highlight,
+        description: highlight,
+        source_platform: "Custom Entry"
+      };
+
+      try {
+        const res = await fetch(`/api/trips/${currentTripId}/items`, {
+          method: "POST",
+          headers: getAuthHeaders({ "Content-Type": "application/json" }),
+          credentials: "include",
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          modal.style.display = "none";
+          form.reset();
+          await refreshTrip();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          alert("Failed to add itinerary stop: " + (err.detail || res.statusText));
+        }
+      } catch (err) {
+        alert("Error adding stop: " + err.message);
+      }
     });
   }
 }

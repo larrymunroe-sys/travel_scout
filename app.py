@@ -323,6 +323,8 @@ class AddItemPayload(BaseModel):
     url: Optional[str] = None
     source_platform: Optional[str] = "Curated"
     assigned_date: Optional[str] = "todo"
+    booking_status: Optional[str] = "unbooked"
+    booking_ref: Optional[str] = None
 
     @field_validator("url")
     @classmethod
@@ -1387,23 +1389,36 @@ async def add_itinerary_item(
                 )
             city_seg_id = matched_seg.id
 
+    if not city_seg_id and trip.city_segments:
+        city_seg_id = trip.city_segments[0].id
+
+    lat = payload.lat
+    lon = payload.lon
+    if (lat is None or lon is None or (lat == 0.0 and lon == 0.0)) and city_seg_id:
+        seg = db.query(CitySegment).filter(CitySegment.id == city_seg_id).first()
+        if seg and seg.lat and seg.lon:
+            lat = seg.lat
+            lon = seg.lon
+
     item = ItineraryItem(
         trip_id=trip_id,
         city_segment_id=city_seg_id,
-        title=payload.title,
-        category=payload.category,
+        title=payload.title.strip(),
+        category=payload.category or "gems",
         neighborhood=payload.neighborhood,
         address=payload.address,
-        lat=payload.lat,
-        lon=payload.lon,
-        cost=payload.cost,
-        is_free=payload.is_free,
-        time_info=payload.time_info,
+        lat=lat,
+        lon=lon,
+        cost=payload.cost or "Free",
+        is_free=payload.is_free or (payload.cost and payload.cost.strip().lower() == "free"),
+        time_info=payload.time_info or "Flexible",
         highlight=payload.highlight,
-        description=payload.description,
+        description=payload.description or payload.highlight,
         url=payload.url,
-        source_platform=payload.source_platform,
+        source_platform=payload.source_platform or "Custom Entry",
         assigned_date=payload.assigned_date or "todo",
+        booking_status=payload.booking_status or "unbooked",
+        booking_ref=payload.booking_ref,
         added_by_user_id=user.id
     )
     db.add(item)

@@ -244,9 +244,12 @@
 
       <!-- To-Do / Bucket List Section -->
       <div class="todo-section">
-        <div class="todo-header">
-          <h3>📋 Unscheduled Bucket List & To-Do</h3>
+        <div class="todo-header" style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+          <h3>📋 Unscheduled Bucket List &amp; To-Do</h3>
           <span class="badge" id="todoCountBadge">0 Items</span>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="openAddItemModal('todo')" style="margin-left:auto; font-size:0.75rem; padding:0.22rem 0.6rem;" title="Add an activity or stop to your bucket list">
+            ➕ Add Wishlist Card
+          </button>
         </div>
         <div id="todoGrid" class="cards-grid">
           <!-- Injected via JavaScript -->
@@ -1150,12 +1153,106 @@
     </div>
   </div>
 
+  <!-- MODAL 13: ADD MANUAL ITINERARY CARD / STOP -->
+  <div class="modal-overlay" id="addItemModal" style="display:none;">
+    <div class="modal-card" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3>➕ Add Custom Itinerary Stop</h3>
+        <button class="modal-close" id="closeAddItemBtn">&times;</button>
+      </div>
+      <form id="addItemForm">
+        <div class="form-group">
+          <label>Activity / Venue Title <span style="color:#f43f5e;">*</span></label>
+          <input type="text" id="manualItemTitle" placeholder="e.g. Sunset drinks at Miradouro, Belém Tower, Fado Dinner" required />
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Destination City <span style="color:#f43f5e;">*</span></label>
+            <select id="manualItemCity" required>
+              <!-- Injected dynamically via JS -->
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Category</label>
+            <select id="manualItemCategory">
+              <option value="dining">🍽️ Dining &amp; Restaurants</option>
+              <option value="sights">🏛️ Sights &amp; Landmarks</option>
+              <option value="gems">💎 Hidden Gems &amp; Culture</option>
+              <option value="music">🎵 Live Music &amp; Concerts</option>
+              <option value="drinks">🍷 Craft Cocktails &amp; Breweries</option>
+              <option value="activities">🛶 Tours &amp; Outdoor</option>
+              <option value="shopping">🛍️ Markets &amp; Shopping</option>
+              <option value="other">📦 Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Schedule / Date</label>
+            <select id="manualItemDate">
+              <option value="todo">📋 To-Do / Bucket List (Unscheduled)</option>
+              <!-- Dates injected dynamically via JS -->
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Cost / Pricing</label>
+            <input type="text" id="manualItemCost" placeholder="e.g. Free, €15, $30" value="Free" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Neighborhood / Area (Optional)</label>
+            <input type="text" id="manualItemNeighborhood" placeholder="e.g. Alfama, Baixa, Waterfront" />
+          </div>
+          <div class="form-group">
+            <label>Street Address (Optional)</label>
+            <input type="text" id="manualItemAddress" placeholder="e.g. Av. da Liberdade 28" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Website or Ticket URL (Optional)</label>
+            <input type="url" id="manualItemUrl" placeholder="https://..." />
+          </div>
+          <div class="form-group">
+            <label>Reservation Status</label>
+            <select id="manualItemBookingStatus">
+              <option value="unbooked">⚪ Unbooked / Wishlist Only</option>
+              <option value="pending">🟡 Reservation Requested</option>
+              <option value="confirmed">🟢 Confirmed / Tickets Booked</option>
+              <option value="completed">🟣 Attended / Completed</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Confirmation Code / Reference (Optional)</label>
+          <input type="text" id="manualItemBookingRef" placeholder="e.g. RES-99814, Seat 12B, Order #4421" />
+        </div>
+
+        <div class="form-group">
+          <label>Notes &amp; Highlights (Optional)</label>
+          <textarea id="manualItemHighlight" rows="2" placeholder="e.g. Best photo spots, recommended dishes, dress code, booking timing..."></textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="cancelAddItemBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary">➕ Add to Itinerary</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <footer class="app-footer">
     <p>Travel Scout &bull; Multi-City Collaborative Platform &bull; Date-Matched Accommodations &bull; Real-Time Multi-User Planning</p>
   </footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/app.js?v=2.5"></script>
+  <script src="/static/app.js?v=2.6"></script>
 </body>
 </html>
 
