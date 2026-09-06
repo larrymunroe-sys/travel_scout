@@ -41,6 +41,10 @@
           <!-- Injected via JavaScript -->
         </div>
 
+        <button id="openAddItemHeaderBtn" type="button" class="btn btn-primary btn-sm" onclick="openAddItemModal('todo')" title="Add a custom activity, venue, or stop to your itinerary">
+          ➕ Add Custom Item
+        </button>
+
         <button id="openPrintHeaderBtn" class="btn btn-secondary btn-sm" title="Print itinerary, save PDF, or send by email/text">
           🖨️ Print / Export
         </button>
@@ -185,6 +189,9 @@
           <button type="button" id="exploreLaunchAgentBtn" class="btn btn-sm" style="background: linear-gradient(135deg, #6366f1, #a855f7); color:#fff; border:none; padding:0.25rem 0.75rem; font-size:0.8rem; font-weight:600; border-radius:var(--radius-sm); cursor:pointer; display:inline-flex; align-items:center; gap:0.35rem;">
             🤖 Local City Scout Agent
           </button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="openAddItemModal('todo')" style="font-size:0.8rem; font-weight:600; padding:0.25rem 0.75rem;" title="Add a custom activity, venue, or stop to your itinerary">
+            ➕ Add Custom Item
+          </button>
         </div>
 
         <div class="legend" style="display:flex; gap:0.5rem; flex-wrap:wrap; font-size:0.75rem;">
@@ -235,7 +242,7 @@
           <button id="openPrintModalBtn" class="btn btn-secondary" title="Print itinerary, save PDF, or send by email/text">
             🖨️ Print &amp; Export
           </button>
-          <button id="openAddItemBtn" class="btn btn-primary">
+          <button id="openAddItemBtn" type="button" class="btn btn-primary" onclick="openAddItemModal('todo')" title="Add a custom activity, venue, or stop to your itinerary">
             ➕ Add Custom Item
           </button>
 
@@ -1154,11 +1161,11 @@
   </div>
 
   <!-- MODAL 13: ADD MANUAL ITINERARY CARD / STOP -->
-  <div class="modal-overlay" id="addItemModal" style="display:none;">
+  <div class="modal-overlay" id="addItemModal" style="display:none;" onclick="if(event.target === this) this.style.display='none';">
     <div class="modal-card" style="max-width: 580px;">
       <div class="modal-header">
         <h3>➕ Add Custom Itinerary Stop</h3>
-        <button class="modal-close" id="closeAddItemBtn">&times;</button>
+        <button type="button" class="modal-close" id="closeAddItemBtn" onclick="document.getElementById('addItemModal').style.display='none';">&times;</button>
       </div>
       <form id="addItemForm">
         <div class="form-group">
@@ -1240,7 +1247,7 @@
         </div>
 
         <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" id="cancelAddItemBtn">Cancel</button>
+          <button type="button" class="btn btn-secondary" id="cancelAddItemBtn" onclick="document.getElementById('addItemModal').style.display='none';">Cancel</button>
           <button type="submit" class="btn btn-primary">➕ Add to Itinerary</button>
         </div>
       </form>
@@ -1252,7 +1259,7 @@
   </footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/app.js?v=2.6"></script>
+  <script src="/static/app.js?v=2.7"></script>
 </body>
 </html>
 

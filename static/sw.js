@@ -1,5 +1,5 @@
 // Travel Scout Progressive Web App Service Worker (Offline Cache)
-const CACHE_NAME = "travel-scout-v2.5";
+const CACHE_NAME = "travel-scout-v2.7";
 const PRECACHE_URLS = [
   "/",
   "/static/styles.css",
@@ -25,6 +25,7 @@ self.addEventListener("activate", (event) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
+            console.log("Removing outdated service worker cache:", key);
             return caches.delete(key);
           }
         })
@@ -55,6 +56,22 @@ self.addEventListener("fetch", (event) => {
         .catch(() => {
           return caches.match(event.request);
         })
+    );
+    return;
+  }
+
+  // Network-first for HTML navigation requests so users always receive latest app version
+  if (event.request.mode === "navigate" || url.pathname === "/" || url.pathname === "/index.html") {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(event.request))
     );
     return;
   }

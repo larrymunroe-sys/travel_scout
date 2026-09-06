@@ -40,7 +40,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Register PWA Service Worker
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js")
-      .then(reg => console.log("Travel Scout Service Worker active:", reg.scope))
+      .then(reg => {
+        console.log("Travel Scout Service Worker active:", reg.scope);
+        reg.update().catch(() => {});
+      })
       .catch(err => console.log("Service Worker registration skipped:", err));
   }
 
@@ -3232,78 +3235,121 @@ function initCalendarExport() {
 
 // 15. Manual Itinerary Card Creation Modal
 window.openAddItemModal = function(preselectedDate = "todo", preselectedCity = null) {
+  if (!currentUser) {
+    alert("🔒 Please sign in with your Google or Gmail account before adding custom stops.");
+    if (window.openLogin) window.openLogin();
+    return;
+  }
+  if (!currentTripId) {
+    alert("Please select or create an itinerary first.");
+    return;
+  }
+
   const modal = document.getElementById("addItemModal");
-  if (!modal) return;
+  if (!modal) {
+    console.error("addItemModal element not found in DOM");
+    return;
+  }
 
-  // Populate cities dropdown
-  const citySelect = document.getElementById("manualItemCity");
-  if (citySelect) {
-    const cities = (currentTripData && currentTripData.cities) ? currentTripData.cities : [];
-    if (cities.length === 0) {
-      citySelect.innerHTML = `<option value="">General Trip</option>`;
-    } else {
-      citySelect.innerHTML = cities.map(c => `
-        <option value="${c.id}" ${preselectedCity && (c.city_name.toLowerCase() === preselectedCity.toLowerCase() || c.id === preselectedCity) ? 'selected' : ''}>
-          ${escapeHtml(c.city_name)} (${escapeHtml(c.country || 'Region')})
-        </option>
-      `).join("");
+  try {
+    // Populate cities dropdown
+    const citySelect = document.getElementById("manualItemCity");
+    if (citySelect) {
+      const cities = (currentTripData && Array.isArray(currentTripData.cities)) ? currentTripData.cities : [];
+      if (cities.length === 0) {
+        citySelect.innerHTML = `<option value="">General Trip</option>`;
+      } else {
+        const presCityStr = (typeof preselectedCity === "string" && preselectedCity.trim()) ? preselectedCity.trim().toLowerCase() : null;
+        citySelect.innerHTML = cities.map(c => {
+          const cName = c.city_name || "City";
+          const cCountry = c.country || "Region";
+          const isSelected = presCityStr && (cName.toLowerCase().trim() === presCityStr || String(c.id) === String(preselectedCity));
+          return `<option value="${escapeHtml(String(c.id))}" ${isSelected ? 'selected' : ''}>
+            ${escapeHtml(cName)} (${escapeHtml(cCountry)})
+          </option>`;
+        }).join("");
+      }
     }
-  }
 
-  // Populate dates dropdown
-  const dateSelect = document.getElementById("manualItemDate");
-  if (dateSelect) {
-    const availDates = (currentTripData && currentTripData.available_dates) ? currentTripData.available_dates : [];
-    dateSelect.innerHTML = `
-      <option value="todo" ${preselectedDate === 'todo' || !preselectedDate ? 'selected' : ''}>📋 To-Do / Bucket List (Unscheduled)</option>
-      ${availDates.map(d => `
-        <option value="${d}" ${preselectedDate === d ? 'selected' : ''}>📅 ${d}</option>
-      `).join("")}
-    `;
-  }
+    // Populate dates dropdown
+    const dateSelect = document.getElementById("manualItemDate");
+    if (dateSelect) {
+      const availDates = (currentTripData && Array.isArray(currentTripData.available_dates)) ? currentTripData.available_dates : [];
+      const isTodoSelected = !preselectedDate || preselectedDate === "todo";
+      dateSelect.innerHTML = `
+        <option value="todo" ${isTodoSelected ? 'selected' : ''}>📋 To-Do / Bucket List (Unscheduled)</option>
+        ${availDates.map(d => `
+          <option value="${escapeHtml(String(d))}" ${preselectedDate === d ? 'selected' : ''}>📅 ${escapeHtml(String(d))}</option>
+        `).join("")}
+      `;
+    }
 
-  // Clear / reset inputs
-  const titleInput = document.getElementById("manualItemTitle");
-  if (titleInput) titleInput.value = "";
-  const costInput = document.getElementById("manualItemCost");
-  if (costInput) costInput.value = "Free";
-  const neighInput = document.getElementById("manualItemNeighborhood");
-  if (neighInput) neighInput.value = "";
-  const addrInput = document.getElementById("manualItemAddress");
-  if (addrInput) addrInput.value = "";
-  const urlInput = document.getElementById("manualItemUrl");
-  if (urlInput) urlInput.value = "";
-  const statusSelect = document.getElementById("manualItemBookingStatus");
-  if (statusSelect) statusSelect.value = "unbooked";
-  const refInput = document.getElementById("manualItemBookingRef");
-  if (refInput) refInput.value = "";
-  const hlInput = document.getElementById("manualItemHighlight");
-  if (hlInput) hlInput.value = "";
+    // Clear / reset inputs
+    const titleInput = document.getElementById("manualItemTitle");
+    if (titleInput) titleInput.value = "";
+    const costInput = document.getElementById("manualItemCost");
+    if (costInput) costInput.value = "Free";
+    const neighInput = document.getElementById("manualItemNeighborhood");
+    if (neighInput) neighInput.value = "";
+    const addrInput = document.getElementById("manualItemAddress");
+    if (addrInput) addrInput.value = "";
+    const urlInput = document.getElementById("manualItemUrl");
+    if (urlInput) urlInput.value = "";
+    const statusSelect = document.getElementById("manualItemBookingStatus");
+    if (statusSelect) statusSelect.value = "unbooked";
+    const refInput = document.getElementById("manualItemBookingRef");
+    if (refInput) refInput.value = "";
+    const hlInput = document.getElementById("manualItemHighlight");
+    if (hlInput) hlInput.value = "";
 
-  modal.style.display = "flex";
-  if (titleInput) {
-    setTimeout(() => titleInput.focus(), 80);
+    modal.style.display = "flex";
+    if (titleInput) {
+      setTimeout(() => titleInput.focus(), 80);
+    }
+  } catch (err) {
+    console.error("Error opening add item modal:", err);
+    modal.style.display = "flex";
   }
 };
 
 function initAddItemModal() {
   const modal = document.getElementById("addItemModal");
+  if (!modal) return;
+
   const openBtn = document.getElementById("openAddItemBtn");
+  const openHeaderBtn = document.getElementById("openAddItemHeaderBtn");
   const closeBtn = document.getElementById("closeAddItemBtn");
   const cancelBtn = document.getElementById("cancelAddItemBtn");
   const form = document.getElementById("addItemForm");
 
-  if (openBtn) {
-    openBtn.addEventListener("click", () => {
-      openAddItemModal("todo");
-    });
-  }
+  const openHandler = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    openAddItemModal("todo");
+  };
+
+  if (openBtn) openBtn.addEventListener("click", openHandler);
+  if (openHeaderBtn) openHeaderBtn.addEventListener("click", openHandler);
   if (closeBtn) closeBtn.addEventListener("click", () => modal.style.display = "none");
   if (cancelBtn) cancelBtn.addEventListener("click", () => modal.style.display = "none");
+
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) modal.style.display = "none";
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && modal.style.display === "flex") {
+      modal.style.display = "none";
+    }
+  });
 
   if (form) {
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (!currentUser) {
+        alert("🔒 Please sign in with your Google or Gmail account before adding custom stops.");
+        if (window.openLogin) window.openLogin();
+        return;
+      }
       if (!currentTripId) {
         alert("Please select or create an itinerary first.");
         return;
@@ -3343,6 +3389,13 @@ function initAddItemModal() {
         source_platform: "Custom Entry"
       };
 
+      const submitBtn = form.querySelector("button[type='submit']");
+      const originalText = submitBtn ? submitBtn.textContent : "➕ Add to Itinerary";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "⏳ Adding...";
+      }
+
       try {
         const res = await fetch(`/api/trips/${currentTripId}/items`, {
           method: "POST",
@@ -3361,6 +3414,11 @@ function initAddItemModal() {
         }
       } catch (err) {
         alert("Error adding stop: " + err.message);
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
       }
     });
   }
