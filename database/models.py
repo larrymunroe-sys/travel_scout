@@ -22,6 +22,7 @@ class User(Base):
     # Relationships
     collaborations = relationship("TripCollaborator", back_populates="user", cascade="all, delete-orphan")
     items_added = relationship("ItineraryItem", back_populates="added_by", foreign_keys="ItineraryItem.added_by_user_id")
+    expenses_paid = relationship("TripExpense", back_populates="paid_by", foreign_keys="TripExpense.paid_by_user_id")
 
 class Trip(Base):
     __tablename__ = "trips"
@@ -33,9 +34,12 @@ class Trip(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
+    owner = relationship("User", foreign_keys=[owner_id])
     collaborators = relationship("TripCollaborator", back_populates="trip", cascade="all, delete-orphan")
     city_segments = relationship("CitySegment", back_populates="trip", cascade="all, delete-orphan", order_by="CitySegment.order_index")
     items = relationship("ItineraryItem", back_populates="trip", cascade="all, delete-orphan")
+    expenses = relationship("TripExpense", back_populates="trip", cascade="all, delete-orphan", order_by="TripExpense.created_at.desc()")
+
 
 class TripCollaborator(Base):
     __tablename__ = "trip_collaborators"
@@ -111,7 +115,31 @@ class ItineraryItem(Base):
     note_by_user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
     note_updated_at = Column(DateTime, nullable=True)
 
+    # Booking & Reservation Lifecycle
+    booking_status = Column(String(32), default="unbooked")  # "unbooked", "pending", "confirmed", "completed"
+    booking_ref = Column(String(255), nullable=True)        # Confirmation code / ticket ref / seat numbers
+
     trip = relationship("Trip", back_populates="items")
     city_segment = relationship("CitySegment", back_populates="items")
     added_by = relationship("User", back_populates="items_added", foreign_keys=[added_by_user_id])
     note_by = relationship("User", foreign_keys=[note_by_user_id])
+
+class TripExpense(Base):
+    """Collaborative group expenses, cost tracking, and split-the-bill calculation."""
+    __tablename__ = "trip_expenses"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    trip_id = Column(String(36), ForeignKey("trips.id"), nullable=False)
+    paid_by_user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    title = Column(String(255), nullable=False)
+    amount = Column(Float, nullable=False)
+    currency = Column(String(8), default="EUR")
+    category = Column(String(32), default="dining")  # lodging, dining, tickets, transit, activities, shopping, other
+    split_type = Column(String(32), default="equal")
+    expense_date = Column(String(10), nullable=True)  # YYYY-MM-DD
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    trip = relationship("Trip", back_populates="expenses")
+    paid_by = relationship("User", back_populates="expenses_paid", foreign_keys=[paid_by_user_id])
+

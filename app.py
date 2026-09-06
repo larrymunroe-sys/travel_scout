@@ -10,7 +10,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 
 from fastapi import FastAPI, Depends, Request, Response, HTTPException, status
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, field_validator
@@ -19,11 +19,16 @@ from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 
 from database.connection import init_db, get_db, SessionLocal
-from database.models import User, Trip, TripCollaborator, CitySegment, StayLocation, ItineraryItem
+from database.models import User, Trip, TripCollaborator, CitySegment, StayLocation, ItineraryItem, TripExpense
 from scout.config import BASE_DIR, CITY_PRESETS, CATEGORIES, SEARCH_CHANNELS
 from scout.engine import ScoutEngine
 from scout.web_search import live_city_search
 from scout.transit import resolve_stay_for_date, calculate_transit_from_stay
+from scout.local_agent import run_local_agent_for_city_segment, discover_city_publications, EVENT_SCAN_QUERIES
+from scout.weather import get_trip_weather
+from scout.calendar_sync import generate_trip_ics, generate_google_calendar_url
+
+
 
 app = FastAPI(
     title="Multi-City Collaborative Travel Scout",
@@ -55,6 +60,20 @@ templates_dir.mkdir(exist_ok=True)
 
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 templates = Jinja2Templates(directory=str(templates_dir))
+
+@app.get("/manifest.json")
+async def get_pwa_manifest():
+    manifest_path = static_dir / "manifest.json"
+    if manifest_path.exists():
+        return FileResponse(str(manifest_path), media_type="application/manifest+json")
+    return JSONResponse(status_code=404, content={"detail": "Manifest not found"})
+
+@app.get("/sw.js")
+async def get_pwa_service_worker():
+    sw_path = static_dir / "sw.js"
+    if sw_path.exists():
+        return FileResponse(str(sw_path), media_type="application/javascript")
+    return PlainTextResponse(status_code=404, content="Service Worker not found")
 
 # Ensure database tables and seeds exist on import
 init_db()
@@ -347,7 +366,26 @@ class SearchPayload(BaseModel):
     channel: str = "all"
     category: Optional[str] = None
 
+class LocalAgentPayload(BaseModel):
+    city_id: Optional[str] = None
+    event_types: Optional[List[str]] = None
+    max_per_type: Optional[int] = 3
+
+class BookingUpdatePayload(BaseModel):
+    booking_status: str  # "unbooked", "pending", "confirmed", "completed"
+    booking_ref: Optional[str] = None
+
+class ExpenseCreatePayload(BaseModel):
+    title: str
+    amount: float
+    currency: str = "EUR"
+    category: str = "dining"
+    expense_date: Optional[str] = None
+    notes: Optional[str] = None
+    paid_by_user_id: Optional[str] = None
+
 # ==================== FRONTEND ROOT ====================
+
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_index(request: Request, db: Session = Depends(get_db)):
@@ -366,8 +404,10 @@ async def serve_index(request: Request, db: Session = Depends(get_db)):
             "categories": CATEGORIES,
             "search_channels": SEARCH_CHANNELS,
             "city_presets": CITY_PRESETS,
+            "event_scan_queries": EVENT_SCAN_QUERIES,
         }
     )
+
 
 # ==================== GOOGLE OAUTH 2.0 CONFIG & ROUTES ====================
 
@@ -999,7 +1039,9 @@ async def get_trip_details(trip_id: str, request: Request, db: Session = Depends
             "transit": transit_info,
             "personal_note": item.personal_note,
             "note_author": note_author,
-            "note_date": note_date_str
+            "note_date": note_date_str,
+            "booking_status": item.booking_status or "unbooked",
+            "booking_ref": item.booking_ref,
         }
 
         all_items.append(item_dict)
@@ -1019,6 +1061,9 @@ async def get_trip_details(trip_id: str, request: Request, db: Session = Depends
         for d in sorted(days_map.keys())
     ]
 
+    # Weather forecast across trip cities
+    weather_lookup = get_trip_weather(trip.city_segments)
+
     return {
         "trip": {
             "id": trip.id,
@@ -1030,12 +1075,15 @@ async def get_trip_details(trip_id: str, request: Request, db: Session = Depends
         "cities": cities,
         "available_dates": sorted_dates,
         "categories": CATEGORIES,
+        "event_scan_queries": EVENT_SCAN_QUERIES,
+        "weather": weather_lookup,
         "all_items": all_items,
         "itinerary": {
             "todo": todo_items,
             "days": days_list
         }
     }
+
 
 # ==================== PRINT & EXPORT VIEW ====================
 
@@ -1434,7 +1482,34 @@ async def update_item_note(
         "note_date": item.note_updated_at.strftime("%b %d, %Y, %I:%M %p") if item.note_updated_at else None
     }
 
+@app.put("/api/trips/{trip_id}/items/{item_id}/booking")
+async def update_item_booking(
+    trip_id: str,
+    item_id: str,
+    payload: BookingUpdatePayload,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Update booking lifecycle status and confirmation reference code."""
+    user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=True)
+    item = db.query(ItineraryItem).filter(ItineraryItem.id == item_id, ItineraryItem.trip_id == trip_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    item.booking_status = payload.booking_status or "unbooked"
+    item.booking_ref = (payload.booking_ref or "").strip() or None
+    db.commit()
+    db.refresh(item)
+    return {
+        "status": "updated",
+        "item_id": item.id,
+        "booking_status": item.booking_status,
+        "booking_ref": item.booking_ref
+    }
+
 @app.delete("/api/trips/{trip_id}/items/{item_id}")
+
 async def delete_itinerary_item(trip_id: str, item_id: str, request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     check_trip_access(trip_id, user, db, require_edit=True)
@@ -1569,7 +1644,82 @@ async def trigger_daily_scan(
     scan_result = scout_engine.run_multi_city_daily_scan(db, trip_id, user.id)
     return scan_result
 
+@app.get("/api/trips/{trip_id}/cities/{city_id}/publications")
+async def get_city_publications(
+    trip_id: str,
+    city_id: str,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Retrieve recognized local newspapers, alt-weeklies, and culture publications for a destination city."""
+    user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=False)
+    city = db.query(CitySegment).filter(CitySegment.id == city_id, CitySegment.trip_id == trip_id).first()
+    if not city:
+        raise HTTPException(status_code=404, detail="City segment not found in trip")
+    pubs = discover_city_publications(city.city_name, city.country)
+    return {"city_name": city.city_name, "country": city.country, "publications": pubs}
+
+@app.post("/api/trips/{trip_id}/scout/local-agent")
+async def trigger_local_agent(
+    trip_id: str,
+    payload: LocalAgentPayload,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Run the destination city local cultural agent.
+    
+    Searches local newspapers, weekly publications, and event directories for events
+    (movies, concerts, art exhibits, restaurants, free events, record stores, outdoor festivals,
+    farmers markets, street fairs) and registers them into Explore & Discover.
+    """
+    user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=True)
+
+    cities = []
+    if payload.city_id and payload.city_id != "all":
+        city = db.query(CitySegment).filter(CitySegment.id == payload.city_id, CitySegment.trip_id == trip_id).first()
+        if not city:
+            raise HTTPException(status_code=404, detail="City segment not found in trip")
+        cities = [city]
+    else:
+        cities = db.query(CitySegment).filter(CitySegment.trip_id == trip_id).order_by(CitySegment.order_index).all()
+        if not cities:
+            raise HTTPException(status_code=400, detail="Trip has no destination cities on itinerary")
+
+    total_new = 0
+    all_discovered = []
+    city_summaries = []
+
+    for c in cities:
+        res = run_local_agent_for_city_segment(
+            db=db,
+            trip_id=trip_id,
+            city_id=c.id,
+            user_id=user.id,
+            event_types=payload.event_types,
+            max_per_type=payload.max_per_type or 3
+        )
+        total_new += res.get("newly_discovered", 0)
+        all_discovered.extend(res.get("items", []))
+        city_summaries.append({
+            "city_name": c.city_name,
+            "publications_found": res.get("publications_found", 0),
+            "publications": res.get("publications", []),
+            "newly_discovered": res.get("newly_discovered", 0)
+        })
+
+    return {
+        "status": "success",
+        "total_cities_scanned": len(cities),
+        "total_newly_discovered": total_new,
+        "city_summaries": city_summaries,
+        "items": all_discovered
+    }
+
 # ==================== MAP COORDINATES ENDPOINT ====================
+
 
 @app.get("/api/trips/{trip_id}/map")
 async def get_map_data(trip_id: str, request: Request, db: Session = Depends(get_db)):
@@ -1628,3 +1778,214 @@ async def get_map_data(trip_id: str, request: Request, db: Session = Depends(get
         "stays": stay_points,
         "items": item_points
     }
+
+# ==================== CALENDAR SYNC & EXPORT (.ICS) ====================
+
+@app.get("/api/trips/{trip_id}/export/calendar.ics")
+async def export_trip_calendar(trip_id: str, request: Request, db: Session = Depends(get_db)):
+    """Export the scheduled itinerary to standard .ics iCalendar format for Apple/Google Calendar."""
+    user = get_optional_current_user(request, db)
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    ics_content = generate_trip_ics(trip)
+    safe_name = re.sub(r"[^a-zA-Z0-9_\-]", "_", trip.title).strip("_") or "Travel_Scout"
+    filename = f"{safe_name}_Itinerary.ics"
+
+    return Response(
+        content=ics_content,
+        media_type="text/calendar; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+# ==================== WEATHER FORECAST ENDPOINT ====================
+
+@app.get("/api/trips/{trip_id}/weather")
+async def get_trip_weather_data(trip_id: str, request: Request, db: Session = Depends(get_db)):
+    """Retrieve 7-14 day weather forecasts across all itinerary cities."""
+    user = get_current_user(request, db)
+    trip = check_trip_access(trip_id, user, db, require_edit=False)
+    weather = get_trip_weather(trip.city_segments)
+    return {"trip_id": trip_id, "weather": weather}
+
+# ==================== GROUP EXPENSES & BUDGET TRACKER ====================
+
+@app.get("/api/trips/{trip_id}/expenses")
+async def get_trip_expenses(trip_id: str, request: Request, db: Session = Depends(get_db)):
+    """Retrieve all expenses, category totals, per-traveler spend, and fair settlement balances."""
+    user = get_current_user(request, db)
+    trip = check_trip_access(trip_id, user, db, require_edit=False)
+
+    expenses = db.query(TripExpense).filter(TripExpense.trip_id == trip_id).order_by(TripExpense.created_at.desc()).all()
+    collabs = db.query(TripCollaborator).filter(TripCollaborator.trip_id == trip_id).all()
+
+    # Build member directory
+    members = {}
+    if getattr(trip, "owner", None):
+        members[trip.owner_id] = trip.owner.name
+    else:
+        owner_user = db.query(User).filter(User.id == trip.owner_id).first()
+        if owner_user:
+            members[owner_user.id] = owner_user.name
+    for c in collabs:
+        if c.user:
+            members[c.user_id] = c.user.name
+
+    total_amount = sum(e.amount for e in expenses)
+    by_category = {}
+    by_user_paid = {uid: 0.0 for uid in members}
+
+    for e in expenses:
+        by_category[e.category] = round(by_category.get(e.category, 0.0) + e.amount, 2)
+        by_user_paid[e.paid_by_user_id] = round(by_user_paid.get(e.paid_by_user_id, 0.0) + e.amount, 2)
+
+    num_members = max(1, len(members))
+    share_per_person = round(total_amount / num_members, 2)
+
+    settlement = []
+    debtors = []
+    creditors = []
+    for uid, name in members.items():
+        paid = by_user_paid.get(uid, 0.0)
+        diff = round(paid - share_per_person, 2)
+        settlement.append({
+            "user_id": uid,
+            "name": name,
+            "paid": paid,
+            "fair_share": share_per_person,
+            "net_balance": diff  # Positive = owed money back; Negative = owes money
+        })
+        if diff < -0.01:
+            debtors.append({"name": name, "amount": -diff})
+        elif diff > 0.01:
+            creditors.append({"name": name, "amount": diff})
+
+    curr = expenses[0].currency if expenses else "EUR"
+    settlements = []
+    d_idx = 0
+    c_idx = 0
+    while d_idx < len(debtors) and c_idx < len(creditors):
+        debtor = debtors[d_idx]
+        creditor = creditors[c_idx]
+        settle_amt = min(debtor["amount"], creditor["amount"])
+        if settle_amt > 0.01:
+            settlements.append({
+                "from_user": debtor["name"],
+                "to_user": creditor["name"],
+                "amount": round(settle_amt, 2),
+                "currency": curr
+            })
+        debtor["amount"] -= settle_amt
+        creditor["amount"] -= settle_amt
+        if debtor["amount"] <= 0.01:
+            d_idx += 1
+        if creditor["amount"] <= 0.01:
+            c_idx += 1
+
+    collab_list = []
+    seen_collabs = set()
+    if getattr(trip, "owner", None):
+        collab_list.append({
+            "id": trip.owner_id,
+            "name": trip.owner.name,
+            "email": trip.owner.email,
+            "avatar_color": trip.owner.avatar_color
+        })
+        seen_collabs.add(trip.owner_id)
+    for c in collabs:
+        if c.user and c.user.id not in seen_collabs:
+            collab_list.append({
+                "id": c.user.id,
+                "name": c.user.name,
+                "email": c.user.email,
+                "avatar_color": c.user.avatar_color
+            })
+            seen_collabs.add(c.user.id)
+
+    expense_list = []
+    for e in expenses:
+        payer_name = e.paid_by.name if e.paid_by else "Traveler"
+        payer_color = e.paid_by.avatar_color if e.paid_by else "#38bdf8"
+        expense_list.append({
+            "id": e.id,
+            "title": e.title,
+            "amount": round(e.amount, 2),
+            "currency": e.currency,
+            "category": e.category,
+            "expense_date": e.expense_date or e.created_at.strftime("%Y-%m-%d"),
+            "notes": e.notes,
+            "paid_by_user_id": e.paid_by_user_id,
+            "paid_by_name": payer_name,
+            "paid_by": {
+                "id": e.paid_by_user_id,
+                "name": payer_name,
+                "avatar_color": payer_color
+            }
+        })
+
+    summary_obj = {
+        "total_spent": round(total_amount, 2),
+        "currency": curr,
+        "per_person": share_per_person,
+        "member_count": num_members,
+        "category_totals": by_category,
+        "settlements": settlements
+    }
+
+    return {
+        "total_amount": round(total_amount, 2),
+        "currency": curr,
+        "share_per_person": share_per_person,
+        "by_category": by_category,
+        "settlement": settlement,
+        "settlements": settlements,
+        "expenses": expense_list,
+        "collaborators": collab_list,
+        "summary": summary_obj
+    }
+
+@app.post("/api/trips/{trip_id}/expenses")
+async def create_trip_expense(
+    trip_id: str,
+    payload: ExpenseCreatePayload,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Add a group travel expense with category, currency, and payer attribution."""
+    user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=True)
+    payer_id = payload.paid_by_user_id or user.id
+
+    expense = TripExpense(
+        trip_id=trip_id,
+        paid_by_user_id=payer_id,
+        title=payload.title.strip(),
+        amount=max(0.0, float(payload.amount)),
+        currency=(payload.currency or "EUR").upper(),
+        category=payload.category or "dining",
+        expense_date=payload.expense_date or datetime.utcnow().strftime("%Y-%m-%d"),
+        notes=payload.notes
+    )
+    db.add(expense)
+    db.commit()
+    db.refresh(expense)
+    return {"status": "success", "id": expense.id}
+
+@app.delete("/api/trips/{trip_id}/expenses/{expense_id}")
+async def delete_trip_expense(
+    trip_id: str,
+    expense_id: str,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Remove an expense from the trip budget."""
+    user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=True)
+    exp = db.query(TripExpense).filter(TripExpense.id == expense_id, TripExpense.trip_id == trip_id).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Expense not found")
+    db.delete(exp)
+    db.commit()
+    return {"status": "success"}
+

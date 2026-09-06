@@ -379,6 +379,12 @@ body {
   border: none;
 }
 
+.agent-check-label:hover {
+  border-color: #38bdf8 !important;
+  background: rgba(56, 189, 248, 0.05) !important;
+}
+
+
 /* Badges */
 .badge {
   display: inline-flex;

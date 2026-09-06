@@ -6,6 +6,15 @@ from scout.config import CITY_PRESETS
 from scout.geocoding import resolve_city_coordinates
 
 CHANNEL_SITE_MODIFIERS = {
+    "all": "",
+    "press": "\"weekly newspaper\" OR \"alternative weekly\" OR \"city paper\" OR \"arts and culture\" OR \"events calendar\" OR site:timeout.com",
+    "events": "site:eventbrite.com OR site:timeout.com OR \"events calendar\" OR \"what's on\" OR \"things to do this weekend\"",
+    "music": "site:eventbrite.com OR site:songkick.com OR site:dice.fm OR site:ticketmaster.com",
+    "records": "\"record store\" OR \"vinyl shop\" OR \"in-store performance\" OR \"record shop\" live",
+    "art": "\"art exhibit\" OR \"gallery opening\" OR \"museum exhibition\" OR vernissage OR \"contemporary art\"",
+    "festivals": "\"street fair\" OR \"outdoor festival\" OR \"block party\" OR \"festa\" OR carnival OR \"street festival\"",
+    "markets": "\"farmers market\" OR \"flea market\" OR \"artisan market\" OR \"mercado\" OR \"street market\"",
+    "movies": "\"film festival\" OR \"open air cinema\" OR \"independent cinema\" OR screening OR \"indie film\"",
     "reddit": "site:reddit.com",
     "tiktok": "site:tiktok.com",
     "eater": "site:eater.com",
@@ -17,10 +26,10 @@ CHANNEL_SITE_MODIFIERS = {
     "guides": "site:lonelyplanet.com OR site:timeout.com OR site:fodors.com",
     "blogs": "site:eater.com OR blog OR food",
     "social": "site:facebook.com OR site:x.com OR site:instagram.com",
-    "music": "site:eventbrite.com OR site:songkick.com OR site:dice.fm OR site:ticketmaster.com",
     "venues": "\"live music venue\" OR \"concert hall\" OR \"jazz club\" OR \"music club\"",
     "tickets": "site:eventbrite.com OR site:ticketmaster.com OR site:dice.fm OR site:songkick.com",
 }
+
 
 def live_city_search(
     city_name: str,
@@ -100,6 +109,16 @@ def live_city_search(
             platform = "DICE"
         elif "ticketmaster" in lower_url:
             platform = "Ticketmaster"
+        elif any(w in lower_text or w in lower_url for w in ["record store", "vinyl shop", "record shop", "in-store"]):
+            platform = "Record Store"
+        elif any(w in lower_text or w in lower_url for w in ["art gallery", "gallery opening", "contemporary art", "art exhibit", "museum exhibit", "vernissage"]):
+            platform = "Art Gallery"
+        elif any(w in lower_text or w in lower_url for w in ["film festival", "cinema", "open air cinema", "indie theatre", "screening"]):
+            platform = "Cinema & Film"
+        elif any(w in lower_text or w in lower_url for w in ["street fair", "street festival", "outdoor festival", "festa", "carnival"]):
+            platform = "Street Fair & Festival"
+        elif any(w in lower_text or w in lower_url for w in ["farmers market", "flea market", "artisan market", "mercado"]):
+            platform = "Farmers & Artisan Market"
         elif "yelp.com" in lower_url or "yelp" in lower_title:
             platform = "Yelp"
         elif "eater.com" in lower_url or "eater" in lower_title:
@@ -110,7 +129,9 @@ def live_city_search(
             platform = "Reddit"
         elif "tiktok.com" in lower_url:
             platform = "TikTok"
-        elif "timeout.com" in lower_url or any(m in lower_url or m in lower_title for m in ["magazine", "citymag", "gazette", "eatery guide"]):
+        elif any(w in lower_url or w in lower_text for w in ["alternative weekly", "weekly paper", "alt weekly", "gazette", "chronicle", "city paper", "the portugal news", "mensagem de lisboa", "village voice", "chicago reader", "austin chronicle", "sf bay guardian", "londonist", "stranger"]):
+            platform = "Alt-Weekly / Local Press"
+        elif "timeout.com" in lower_url or any(m in lower_url or m in lower_title for m in ["magazine", "citymag", "eatery guide"]):
             platform = "City Magazine"
         elif "lonelyplanet.com" in lower_url:
             platform = "Lonely Planet"
@@ -125,7 +146,19 @@ def live_city_search(
 
         # Detect category
         cat = category_hint or "gems"
-        if platform == "Michelin Guide" or any(w in lower_text for w in ["michelin", "bib gourmand", "tasting menu", "fine dining", "chef's table", "degustation"]):
+        if platform == "Record Store" or any(w in lower_text for w in ["record store", "vinyl shop", "in-store performance", "album signing", "turntable", "record shop"]):
+            cat = "records"
+        elif platform == "Art Gallery" or any(w in lower_text for w in ["art exhibit", "gallery opening", "vernissage", "museum exhibition", "contemporary art", "sculpture", "biennale", "curator"]):
+            cat = "art"
+        elif platform == "Cinema & Film" or any(w in lower_text for w in ["film festival", "open air cinema", "outdoor movie", "screening", "indie cinema", "cinephile", "documentary screening"]):
+            cat = "movies"
+        elif platform == "Street Fair & Festival" or any(w in lower_text for w in ["street fair", "block party", "outdoor festival", "street festival", "festa popular", "carnival"]):
+            cat = "festivals"
+        elif platform == "Farmers & Artisan Market" or any(w in lower_text for w in ["farmers market", "flea market", "artisan market", "produce market", "organic market", "weekend market"]):
+            cat = "markets"
+        elif platform == "Alt-Weekly / Local Press" or any(w in lower_text for w in ["alternative weekly", "weekly paper", "arts & culture guide", "city paper", "local gazette"]):
+            cat = "press"
+        elif platform == "Michelin Guide" or any(w in lower_text for w in ["michelin", "bib gourmand", "tasting menu", "fine dining", "chef's table", "degustation"]):
             cat = "michelin"
         elif platform == "Craft Brewery" or any(w in lower_text for w in ["brewery", "craft beer", "tasting room", "taproom", "microbrewery", "alehouse", "brewhouse", "ipa", "stout", "lager"]):
             cat = "beer"
@@ -144,10 +177,34 @@ def live_city_search(
         elif any(w in lower_text for w in ["miradouro", "viewpoint", "trail", "park", "beach", "walk", "river", "hike"]):
             cat = "outdoors"
 
+        # Check for free admission
+        is_free = False
+        if any(w in lower_text or w in lower_title for w in ["free admission", "free event", "free entry", "no cover", "free and open", "admission is free", "entrada livre", "grátis", "gratuit"]):
+            is_free = True
+
         # Cost and time estimates tailored for categories & platforms
-        cost_val = "Check venue"
+        cost_val = "Free Admission" if is_free else "Check venue"
         time_val = "Flexible"
-        if platform == "Michelin Guide" or cat == "michelin":
+        if is_free:
+            time_val = "Free & Open to public"
+        elif platform == "Record Store" or cat == "records":
+            cost_val = "Free / Browse Vinyl"
+            time_val = "Afternoon / Evening In-Store"
+        elif platform == "Art Gallery" or cat == "art":
+            cost_val = "Free Gallery / Ticketed Museum"
+            time_val = "Gallery Hours & Vernissages"
+        elif platform == "Cinema & Film" or cat == "movies":
+            cost_val = "$8 - $15 Tickets"
+            time_val = "Evening Showtimes"
+        elif platform == "Street Fair & Festival" or cat == "festivals":
+            cost_val = "Free Admission"
+            is_free = True
+            time_val = "Weekend / All-Day Festival"
+        elif platform == "Farmers & Artisan Market" or cat == "markets":
+            cost_val = "Free Entry"
+            is_free = True
+            time_val = "Morning / Afternoon Market"
+        elif platform == "Michelin Guide" or cat == "michelin":
             cost_val = "$$$$ Fine Dining"
             time_val = "Dinner / Reservations required"
         elif platform == "Craft Brewery" or cat == "beer":
@@ -162,9 +219,9 @@ def live_city_search(
         elif platform == "Music Venue":
             cost_val = "Check box office"
             time_val = "Evening performances"
-        elif platform in ("Yelp", "Eater", "City Magazine"):
+        elif platform in ("Yelp", "Eater", "City Magazine", "Alt-Weekly / Local Press"):
             cost_val = "$$ - $$$"
-            time_val = "Lunch & Dinner hours"
+            time_val = "Weekly & Seasonal Guides"
 
         # Slight coordinate jitter around city center so pins don't overlap exactly
         jitter_lat = default_lat + ((i % 5) - 2) * 0.006
@@ -179,7 +236,7 @@ def live_city_search(
             "lat": round(jitter_lat, 4),
             "lon": round(jitter_lon, 4),
             "cost": cost_val,
-            "is_free": False,
+            "is_free": is_free,
             "time_info": time_val,
             "highlight": body[:120] + "..." if len(body) > 120 else body,
             "description": body,
@@ -187,6 +244,7 @@ def live_city_search(
             "source_platform": platform,
             "assigned_date": "todo",
         })
+
 
     return results
 

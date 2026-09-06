@@ -53,6 +53,11 @@ def init_db():
                     cursor.execute("ALTER TABLE itinerary_items ADD COLUMN note_by_user_id VARCHAR(36)")
                 if "note_updated_at" not in cols:
                     cursor.execute("ALTER TABLE itinerary_items ADD COLUMN note_updated_at DATETIME")
+                if "booking_status" not in cols:
+                    cursor.execute("ALTER TABLE itinerary_items ADD COLUMN booking_status VARCHAR(32) DEFAULT 'unbooked'")
+                if "booking_ref" not in cols:
+                    cursor.execute("ALTER TABLE itinerary_items ADD COLUMN booking_ref VARCHAR(255)")
                 conn.connection.commit()
         except Exception as e:
             print("Schema migration note:", e)
+

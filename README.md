@@ -212,19 +212,82 @@ Travel Scout features multi-channel web scouting across culinary, nightlife, and
 - Click **`⚡ Run Daily Autonomous Scan (All Trip Cities)`**.
 - The engine runs a background sweep across all itinerary cities, checking breweries, speakeasies, Michelin stars, live music tickets, tour dates, and Reddit hidden gems, automatically adding new finds to your To-Do wishlist.
 
+### 🤖 Local City Cultural Scout Agent & Antigravity Skill
+- Click **`🤖 Launch Local City Cultural Scout Agent`** (available in both the **`🧭 Explore & Discover`** and **`🌐 City Scout`** tabs).
+- **Local Press & Media Discovery**: Automatically discovers authentic local newspapers, alternative weeklies, community publications, and cultural calendars for the destination city on your itinerary (e.g. *Mensagem de Lisboa*, *The Portugal News*, *Time Out*, *Agenda Cultural*, *The Village Voice*, *Londonist*, *Sortir à Paris*).
+- **Targeted Event Niches**:
+  - 📰 **Local Alt-Weeklies & Newspapers**: Editorial "What's On This Week" picks and neighborhood gazettes.
+  - 🎬 **Film Festivals & Open-Air Cinema**: Outdoor screenings, repertory indie cinemas, and film festivals.
+  - 🎶 **Live Music & Concerts**: Club shows, tour dates, and ticketing via Songkick, DICE, and Eventbrite.
+  - 📻 **Record Stores & In-Store Gigs**: Independent vinyl shops hosting live in-store acoustic sets and album releases.
+  - 🎨 **Art Exhibits & Gallery Openings**: Contemporary art vernissages, museum retrospectives, and open studios.
+  - 🎪 **Free Outdoor Festivals & Street Fairs**: Block parties, street carnivals, summer festas, and outdoor stages.
+  - 🥖 **Farmers Markets & Artisan Pop-ups**: Weekend farmers markets, artisan flea markets, and organic food halls.
+  - 🎟️ **Free Admission & Community Events**: Admission-free community happenings, outdoor shows, and open events.
+  - 🍽️ **New Restaurants & Food Pop-ups**: Essential restaurant openings, culinary heatmaps, and chef pop-ups.
+- **Auto-Ingestion into Explore & Discover**: Discovered events are immediately ingested into your trip's **Explore & Discover** wishlist with category badges, pricing, schedule info, source links, and map coordinates.
+- **Antigravity Skill & Subagent**: Powered by the `.agents/skills/local-city-scout/SKILL.md` skill and the `local_cultural_scout` subagent, and can be invoked from the CLI using:
+  ```bash
+  python .agents/skills/local-city-scout/scripts/scout_events.py --city "Lisbon" --types "movies,music,records,art,festivals,markets,free"
+  ```
+
+
 ---
 
 ## 9. Interactive Multi-City Route Map
 
 Click the **`🗺️ Interactive Map`** tab for a visual overview of your journey.
 - **City Jump Dropdown:** Select any city to fly directly to its center, or choose **"🌍 Whole Journey Overview"** to view all stops nationwide.
+- **📅 Day Filter:** Filter map markers by single itinerary day or view To-Do bucket list stops.
+- **🚶 Day Route Walking Path:** Automatically calculates and draws geographic walking path polylines between scheduled stops in day sequence.
+- **🔢 Numbered Stop Pins (1, 2, 3...):** Visually sequence your daily walking tour with numbered pins on the map and sidebar.
 - **🏨 Blue Hotel Pins:** Mark your accommodation bases with active dates and directions.
 - **📍 Red Venue Pins:** Mark cultural venues, restaurants, viewpoints, and concerts.
 - **Interactive Sidebar:** Click any venue in the left drawer to center the map on it and open its details popup.
 
 ---
 
-## 10. Sharing & Multi-User Collaboration
+## 10. Collaborative Budget & Expense Splitting
+
+Track all group travel expenses, split shared costs equally, and view real-time settlement balances ("who owes who").
+
+- **KPI Metrics:** View total trip spend, fair share per traveler, and your highest spending category at a glance.
+- **⚖️ Fair Settlement Balance:** Calculates exact bilateral debts (e.g. *Bob owes Alice €25.00*) using an automated debt-simplification algorithm.
+- **📊 Spend by Category:** Visual breakdown of spending across Dining & Drinks, Lodging, Tickets & Events, Transit & Rides, Activities, and Shopping.
+- **🧾 Multi-Currency Ledger:** Log expenses with dates, custom notes, currency (€, $, £, ¥, C$), and payer attribution.
+
+---
+
+## 11. Calendar Sync & One-Click Export
+
+- **📅 One-Click Google Calendar:** Every scheduled itinerary card features a **`📅 + Google Cal`** button that opens a pre-populated event in Google Calendar with title, timing, address, notes, and direct link.
+- **🗓️ Standard .ics iCalendar Download:** Click **`📅 Export .ics`** on the Itinerary tab to download an RFC 5545 `.ics` file directly into Apple Calendar, Microsoft Outlook, or Google Calendar, complete with hotel stays, activities, and coordinates.
+
+---
+
+## 12. Destination Weather Forecasts & Rain Alerts
+
+- **🌦️ Free 14-Day Forecasts:** Powered by Open-Meteo (100% free, zero API key required). Automatically fetches high/low temperatures and weather conditions for destination stops.
+- **☔ Automated Rain Advisories:** Displays rain warnings and suggests swapping outdoor walking tours with covered food halls, museums, or wine lodges on rainy days.
+
+---
+
+## 13. Reservation & Booking Tracker
+
+Track tickets and reservations across their entire lifecycle:
+- **Lifecycle States:** `⚪ Unbooked` (wishlist), `🟡 Reservation Requested / Pending`, `🟢 Confirmed / Tickets Purchased`, `🟣 Attended / Completed`.
+- **Confirmation Codes:** Keep confirmation references (e.g. `#RES-9981`, `#ORDER-4421`, seat assignments) right on the card for quick airport/venue check-in.
+
+---
+
+## 14. Offline PWA & Mobile Installation
+
+- **📱 Progressive Web App (PWA):** Install Travel Scout directly onto iOS, Android, macOS, and Windows home screens with standalone app display and compass icons.
+- **✈️ Airplane-Mode Offline Cache:** Built-in Service Worker caches application assets, itinerary stops, and map data for seamless access during flights or offline travels.
+
+---
+
+## 15. Sharing & Multi-User Collaboration
 
 ### Inviting Co-Travelers
 1. Click **`👥 Share & Invite`** in the header.
@@ -241,7 +304,7 @@ Click the **`🗺️ Interactive Map`** tab for a visual overview of your journe
 
 ---
 
-## 11. Printing, PDF Export & Email/SMS Sharing
+## 16. Printing, PDF Export & Email/SMS Sharing
 
 Click **`🖨️ Print / Export`** in the header or on the Itinerary toolbar.
 
@@ -259,7 +322,7 @@ Click **`🖨️ Print / Export`** in the header or on the Itinerary toolbar.
 
 ---
 
-## 12. Frequently Asked Questions (FAQ)
+## 17. Frequently Asked Questions (FAQ)
 
 #### Q: How do I delete an itinerary I no longer need?
 **A:** Click the red **`🗑️ Delete Trip`** button in the header toolbar, or click **`✏️ Customize`** and click **`🗑️ Delete Trip`** at the bottom of the modal. Deleting your last trip leaves your workspace clean without auto-creating unwanted starter itineraries.

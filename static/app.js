@@ -37,8 +37,18 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.history.replaceState({}, document.title, window.location.pathname);
   }
 
+  // Register PWA Service Worker
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js")
+      .then(reg => console.log("Travel Scout Service Worker active:", reg.scope))
+      .catch(err => console.log("Service Worker registration skipped:", err));
+  }
+
   initTabs();
   initModals();
+  initExpenseTracker();
+  initBookingModal();
+  initCalendarExport();
   initExploreFilters();
   await loadCurrentUser();
   await loadInitialTrip();
@@ -60,6 +70,10 @@ function initTabs() {
 
       if (target === "scout") {
         syncScoutCityWithItinerary();
+      }
+
+      if (target === "expenses") {
+        loadTripExpenses();
       }
 
       if (target === "map") {
@@ -556,6 +570,11 @@ async function refreshTrip() {
     populateCityDropdowns();
     renderExploreTab(true);
     if (leafletMap) renderMapLocations();
+
+    const activeTab = document.querySelector(".nav-tab.active");
+    if (activeTab && activeTab.dataset.tab === "expenses") {
+      loadTripExpenses();
+    }
   } catch (err) {
     console.error("Failed to refresh trip:", err);
   }
@@ -739,18 +758,33 @@ function renderItineraryTab() {
     if (cityFilter !== "all" && dayItems.length === 0) return "";
 
     const dayCity = (dayItems.length > 0 && dayItems[0].city_name && dayItems[0].city_name !== "Universal") ? dayItems[0].city_name : null;
+    const weather = (currentTripData.weather && currentTripData.weather[day.date]) ? currentTripData.weather[day.date] : null;
 
     return `
       <div class="day-block">
         <div class="day-header" style="flex-wrap:wrap; gap:0.5rem; align-items:center;">
           <div class="day-title">📅 Date: <strong>${day.date}</strong> ${dayCity ? `&bull; <span style="color:#38bdf8; font-weight:600;">🏙️ ${escapeHtml(dayCity)}</span>` : ''}</div>
           <span class="badge" style="background:rgba(56,189,248,0.15); color:#38bdf8;">${dayItems.length} Stops</span>
+          ${weather ? `
+            <span class="badge" title="${escapeHtml(weather.advisory)}" style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); color:var(--text-main); font-size:0.75rem; display:inline-flex; align-items:center; gap:0.35rem; padding:0.2rem 0.55rem; border-radius:999px;">
+              <span>${weather.icon}</span>
+              <span style="font-weight:600;">${Math.round(weather.temp_max_f)}&deg;F / ${Math.round(weather.temp_min_f)}&deg;F</span>
+              <span style="color:#94a3b8; font-size:0.7rem;">${escapeHtml(weather.condition)}</span>
+              ${weather.precipitation_probability_max > 20 ? `<span style="color:#38bdf8; font-size:0.7rem;">💧 ${weather.precipitation_probability_max}%</span>` : ''}
+            </span>
+          ` : ''}
           ${dayCity ? `
             <button type="button" class="btn btn-secondary btn-sm" style="margin-left:auto; padding:0.2rem 0.55rem; font-size:0.75rem;" onclick="jumpToScoutCity('${escapeHtml(dayCity)}')">
               🌐 Scout ${escapeHtml(dayCity)} 🚀
             </button>
           ` : ''}
         </div>
+        ${weather && weather.is_rainy ? `
+          <div style="background:rgba(56,189,248,0.1); border:1px solid rgba(56,189,248,0.3); color:#bae6fd; border-radius:6px; padding:0.45rem 0.75rem; font-size:0.8rem; margin:0.4rem 0 0.6rem 0; display:flex; align-items:center; gap:0.5rem;">
+            <span>☔</span>
+            <span><strong>Rain Forecast:</strong> ${escapeHtml(weather.advisory)}</span>
+          </div>
+        ` : ''}
         ${dayItems.length === 0 ? `
           <p style="color:var(--text-muted); font-size:0.85rem; padding:1rem 0;">No stops scheduled for this day yet. Select a date from To-Do above!</p>
         ` : `
@@ -773,6 +807,25 @@ function renderCard(item, availableDates) {
     icon: "✨",
     label: item.category ? (item.category.charAt(0).toUpperCase() + item.category.slice(1)) : "General"
   };
+
+  const bookingStatus = item.booking_status || "unbooked";
+  const bookingRef = item.booking_ref || "";
+  const statusBadge = {
+    unbooked: { icon: "⚪", label: "Unbooked", bg: "rgba(148,163,184,0.12)", color: "#94a3b8" },
+    pending: { icon: "🟡", label: "Pending", bg: "rgba(251,191,36,0.15)", color: "#fbbf24" },
+    confirmed: { icon: "🟢", label: "Confirmed", bg: "rgba(34,197,94,0.15)", color: "#22c55e" },
+    completed: { icon: "🟣", label: "Completed", bg: "rgba(168,85,247,0.15)", color: "#c084fc" }
+  }[bookingStatus] || { icon: "⚪", label: "Unbooked", bg: "rgba(148,163,184,0.12)", color: "#94a3b8" };
+
+  let gcalUrl = "";
+  if (item.assigned_date && item.assigned_date !== "todo") {
+    const cleanDate = item.assigned_date.replace(/-/g, "");
+    const gcalStart = `${cleanDate}T100000Z`;
+    const gcalEnd = `${cleanDate}T120000Z`;
+    const gcalDetails = encodeURIComponent((item.highlight || "") + (item.url ? `\n\nLink: ${item.url}` : ""));
+    const gcalLoc = encodeURIComponent(item.address || item.city_name || "");
+    gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(item.title)}&dates=${gcalStart}/${gcalEnd}&details=${gcalDetails}&location=${gcalLoc}`;
+  }
 
   const hasDirectUrl = Boolean(item.url && item.url.trim() !== "");
   const safeDirectUrl = hasDirectUrl ? sanitizeUrl(item.url) : "";
@@ -805,6 +858,10 @@ function renderCard(item, availableDates) {
           </div>
         </div>
         <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap; justify-content:flex-end;">
+          <button type="button" class="btn-booking-status" onclick='openBookingModal("${item.id}", ${JSON.stringify(item.title).replace(/'/g, "&apos;")}, "${bookingStatus}", ${JSON.stringify(bookingRef).replace(/'/g, "&apos;")})' style="background:${statusBadge.bg}; color:${statusBadge.color}; border:1px solid ${statusBadge.color}40; border-radius:999px; padding:0.18rem 0.5rem; font-size:0.72rem; cursor:pointer; display:inline-flex; align-items:center; gap:0.3rem; font-weight:600;" title="Click to update reservation / booking status">
+            <span>${statusBadge.icon} ${statusBadge.label}</span>
+            ${bookingRef ? `<span style="opacity:0.85; font-size:0.68rem; margin-left:0.2rem;">#${escapeHtml(bookingRef)}</span>` : ''}
+          </button>
           <span class="badge" style="background:rgba(56,189,248,0.12); color:#38bdf8; font-size:0.72rem; padding:0.18rem 0.45rem;">${catConfig.icon} ${escapeHtml(catConfig.label)}</span>
           <span class="card-city-badge">${escapeHtml(item.city_name || 'General')}</span>
         </div>
@@ -836,6 +893,11 @@ function renderCard(item, availableDates) {
         <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" class="item-link-pill maps" title="Open location in Google Maps">
           📍 Maps &amp; Directions ↗
         </a>
+        ${gcalUrl ? `
+          <a href="${escapeHtml(gcalUrl)}" target="_blank" rel="noopener noreferrer" class="item-link-pill calendar" title="Add event to Google Calendar" style="background:rgba(59,130,246,0.12); color:#60a5fa; border:1px solid rgba(59,130,246,0.25);">
+            📅 + Google Cal ↗
+          </a>
+        ` : ''}
       </div>
 
       <!-- Personal Note Section -->
@@ -2176,8 +2238,10 @@ function populateCityDropdowns() {
       cities.map(c => `<option value="${c.id}">${escapeHtml(c.city_name)}</option>`).join("");
   }
 
+  populateLocalAgentCities();
   renderScoutSuggestions();
 }
+
 
 function renderScoutSuggestions() {
   const container = document.getElementById("scoutSuggestions");
@@ -2347,7 +2411,197 @@ function initScout() {
       }
     });
   }
+
+  initLocalAgentModal();
 }
+
+// ==================== LOCAL CITY CULTURAL SCOUT AGENT ====================
+
+function initLocalAgentModal() {
+  const modal = document.getElementById("localAgentModal");
+  const openTab1Btn = document.getElementById("exploreLaunchAgentBtn");
+  const openTab4Btn = document.getElementById("openLocalAgentModalBtn");
+  const closeBtn1 = document.getElementById("closeLocalAgentModalBtn");
+  const closeBtn2 = document.getElementById("closeLocalAgentModalBtn2");
+  const citySelect = document.getElementById("localAgentCitySelect");
+  const pubsList = document.getElementById("localAgentPubsList");
+  const statusBox = document.getElementById("localAgentStatus");
+  const statusText = document.getElementById("localAgentStatusText");
+  const resultsBox = document.getElementById("localAgentResultsBox");
+  const resultsTitle = document.getElementById("localAgentResultsTitle");
+  const resultsDetail = document.getElementById("localAgentResultsDetail");
+  const executeBtn = document.getElementById("runLocalAgentExecuteBtn");
+  const selectAllBtn = document.getElementById("agentSelectAllBtn");
+  const deselectAllBtn = document.getElementById("agentDeselectAllBtn");
+
+  if (!modal) return;
+
+  const openModal = async () => {
+    if (!currentUser) {
+      alert("🔒 Please sign in with your account before launching the cultural scout agent.");
+      if (window.openLogin) window.openLogin();
+      return;
+    }
+    modal.style.display = "flex";
+    if (statusBox) statusBox.style.display = "none";
+    if (resultsBox) resultsBox.style.display = "none";
+    if (executeBtn) {
+      executeBtn.disabled = false;
+      executeBtn.textContent = "🚀 Run Local Cultural Agent";
+    }
+
+    populateLocalAgentCities();
+
+    if (citySelect) {
+      await updateLocalAgentPublications(citySelect.value);
+    }
+  };
+
+  if (openTab1Btn) openTab1Btn.addEventListener("click", openModal);
+  if (openTab4Btn) openTab4Btn.addEventListener("click", openModal);
+  if (closeBtn1) closeBtn1.addEventListener("click", () => modal.style.display = "none");
+  if (closeBtn2) closeBtn2.addEventListener("click", () => modal.style.display = "none");
+
+  if (citySelect) {
+    citySelect.addEventListener("change", async () => {
+      await updateLocalAgentPublications(citySelect.value);
+    });
+  }
+
+  if (selectAllBtn) {
+    selectAllBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      document.querySelectorAll('input[name="agent_event_type"]').forEach(cb => cb.checked = true);
+    });
+  }
+
+  if (deselectAllBtn) {
+    deselectAllBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      document.querySelectorAll('input[name="agent_event_type"]').forEach(cb => cb.checked = false);
+    });
+  }
+
+  if (executeBtn) {
+    executeBtn.addEventListener("click", async () => {
+      const selectedTypes = Array.from(document.querySelectorAll('input[name="agent_event_type"]:checked')).map(cb => cb.value);
+      if (selectedTypes.length === 0) {
+        alert("Please select at least one cultural event type to scout.");
+        return;
+      }
+
+      const cityId = citySelect ? citySelect.value : "all";
+      const cityName = citySelect && citySelect.selectedOptions.length > 0 ? citySelect.selectedOptions[0].text : "destination cities";
+
+      executeBtn.disabled = true;
+      executeBtn.textContent = "⏳ Agent Scouting in Progress...";
+      if (statusBox) {
+        statusBox.style.display = "block";
+        statusText.textContent = `Agent is scanning local publications and event feeds for ${cityName}...`;
+      }
+      if (resultsBox) resultsBox.style.display = "none";
+
+      try {
+        const res = await fetch(`/api/trips/${currentTripId}/scout/local-agent`, {
+          method: "POST",
+          headers: getAuthHeaders({ "Content-Type": "application/json" }),
+          credentials: "include",
+          body: JSON.stringify({
+            city_id: cityId === "all" ? null : cityId,
+            event_types: selectedTypes,
+            max_per_type: 3
+          })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || "Failed to complete local agent scout");
+        }
+
+        const data = await res.json();
+        if (statusBox) statusBox.style.display = "none";
+
+        if (resultsBox) {
+          resultsBox.style.display = "block";
+          resultsTitle.textContent = `✨ Discovered ${data.total_newly_discovered} New Cultural Events!`;
+          resultsDetail.innerHTML = `Scanned <strong>${data.total_cities_scanned}</strong> destination cities across local newspapers, alt-weeklies, and event platforms. All discoveries are now live in your <strong>Explore & Discover</strong> wishlist!`;
+        }
+
+        executeBtn.disabled = false;
+        executeBtn.textContent = "✓ Ingested! Run Again";
+
+        // Refresh trip data to update items and UI counters
+        await refreshTrip();
+
+        // Switch to Explore & Discover tab
+        const exploreTab = document.querySelector('.nav-tab[data-tab="explore"]');
+        if (exploreTab) {
+          setTimeout(() => {
+            exploreTab.click();
+          }, 800);
+        }
+      } catch (err) {
+        if (statusBox) statusBox.style.display = "none";
+        executeBtn.disabled = false;
+        executeBtn.textContent = "🚀 Run Local Cultural Agent";
+        alert("Local Cultural Agent Notice: " + err.message);
+      }
+    });
+  }
+}
+
+function populateLocalAgentCities() {
+  const citySelect = document.getElementById("localAgentCitySelect");
+  if (!citySelect || !currentTripData) return;
+
+  const cities = getTripItineraryCities();
+  const prev = citySelect.value;
+
+  citySelect.innerHTML = `<option value="all">🏙️ All Destination Cities on Trip Itinerary (${cities.length} stops)</option>` +
+    cities.map(c => `<option value="${c.id}">📍 ${escapeHtml(c.city_name)} (${escapeHtml(c.country || '')})</option>`).join("");
+
+  if (prev && (prev === "all" || cities.some(c => c.id === prev))) {
+    citySelect.value = prev;
+  }
+}
+
+async function updateLocalAgentPublications(cityId) {
+  const pubsList = document.getElementById("localAgentPubsList");
+  if (!pubsList) return;
+
+  if (!cityId || cityId === "all") {
+    const cities = getTripItineraryCities();
+    const cityNames = cities.map(c => c.city_name).join(", ");
+    pubsList.innerHTML = `<span style="color:var(--text-muted);">The agent will dynamically discover and read local newspapers, weekly publications, and culture calendars for: <strong>${escapeHtml(cityNames || 'all itinerary stops')}</strong>.</span>`;
+    return;
+  }
+
+  pubsList.innerHTML = `<span style="color:var(--text-muted); font-style:italic;">Scanning local press and media registry for this destination...</span>`;
+
+  try {
+    const res = await fetch(`/api/trips/${currentTripId}/cities/${cityId}/publications`, {
+      headers: getAuthHeaders(),
+      credentials: "include"
+    });
+    if (!res.ok) throw new Error("Could not fetch publications");
+    const data = await res.json();
+
+    if (data.publications && data.publications.length > 0) {
+      pubsList.innerHTML = data.publications.map(p => `
+        <div style="margin-bottom:0.35rem; display:flex; align-items:center; flex-wrap:wrap; gap:0.35rem;">
+          <strong>• ${escapeHtml(p.name)}</strong>
+          <span style="color:var(--text-muted); font-size:0.75rem;">(${escapeHtml(p.type)})</span>
+          ${p.url ? `<a href="${sanitizeUrl(p.url)}" target="_blank" rel="noopener noreferrer" style="color:#38bdf8; text-decoration:none; font-size:0.75rem; margin-left:0.2rem;">🔗 Visit Media</a>` : ''}
+        </div>
+      `).join("");
+    } else {
+      pubsList.innerHTML = `<span style="color:var(--text-muted);">The agent will execute live web searches to identify local alternative weeklies, community guides, and cultural calendars for ${escapeHtml(data.city_name)}.</span>`;
+    }
+  } catch (err) {
+    pubsList.innerHTML = `<span style="color:var(--text-muted);">Local press discovery will be executed live during the agent run.</span>`;
+  }
+}
+
 
 function addSearchResultToWishlist(index) {
   if (window._lastSearchResults && window._lastSearchResults[index]) {
@@ -2446,7 +2700,23 @@ function initMap() {
           leafletMap.flyTo([c.lat, c.lon], 13, { duration: 1.2 });
         }
       }
+      renderMapLocations();
     });
+  }
+
+  const daySelect = document.getElementById("mapDaySelect");
+  if (daySelect) {
+    daySelect.addEventListener("change", () => renderMapLocations());
+  }
+
+  const routeCheck = document.getElementById("mapRouteCheck");
+  if (routeCheck) {
+    routeCheck.addEventListener("change", () => renderMapLocations());
+  }
+
+  const staysCheck = document.getElementById("mapStaysCheck");
+  if (staysCheck) {
+    staysCheck.addEventListener("change", () => renderMapLocations());
   }
 }
 
@@ -2460,82 +2730,155 @@ async function renderMapLocations() {
     mapMarkersGroup.clearLayers();
     mapRouteGroup.clearLayers();
 
+    // Populate day filter if options not yet loaded
+    const daySelect = document.getElementById("mapDaySelect");
+    if (daySelect && currentTripData && currentTripData.available_dates) {
+      const currentSelectedDay = daySelect.value || "all";
+      const existingVals = Array.from(daySelect.options).map(o => o.value);
+      const allDates = currentTripData.available_dates || [];
+      const needsUpdate = allDates.some(d => !existingVals.includes(d));
+      if (needsUpdate || existingVals.length <= 2) {
+        daySelect.innerHTML = `
+          <option value="all">All Dates</option>
+          <option value="todo">📋 To-Do / Bucket List</option>
+          ${allDates.map(d => `<option value="${d}">📅 ${d}</option>`).join("")}
+        `;
+        if (existingVals.includes(currentSelectedDay)) {
+          daySelect.value = currentSelectedDay;
+        }
+      }
+    }
+
+    const cityFilter = document.getElementById("mapCityJump")?.value || "all";
+    const dayFilter = document.getElementById("mapDaySelect")?.value || "all";
+    const showStays = document.getElementById("mapStaysCheck") ? document.getElementById("mapStaysCheck").checked : true;
+    const drawRoute = document.getElementById("mapRouteCheck") ? document.getElementById("mapRouteCheck").checked : true;
+
+    // Filter Stays / Hotels
+    if (showStays) {
+      let filteredStays = data.stays;
+      if (cityFilter !== "all") {
+        filteredStays = filteredStays.filter(s => s.city_id === cityFilter);
+      }
+
+      filteredStays.forEach(s => {
+        if (s.lat && s.lon) {
+          const hotelIcon = L.divIcon({
+            className: 'custom-hotel-pin',
+            html: `<div style="background:#0284c7; color:#fff; border:2px solid #fff; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; font-size:15px; box-shadow:0 3px 10px rgba(0,0,0,0.6);">🏨</div>`,
+            iconSize: [32, 32],
+            iconAnchor: [16, 16]
+          });
+
+          L.marker([s.lat, s.lon], { icon: hotelIcon })
+            .addTo(mapMarkersGroup)
+            .bindPopup(`
+              <div style="color:#020617; padding:0.4rem; min-width:190px;">
+                <strong style="color:#0284c7; font-size:1rem;">🏨 ${escapeHtml(s.name)}</strong>
+                <div style="font-size:0.8rem; color:#475569; margin-top:0.2rem;">📍 ${escapeHtml(s.address)}</div>
+                <div style="font-size:0.75rem; color:#d97706; font-weight:bold; margin-top:0.3rem;">📅 Active: ${s.start_date} &rarr; ${s.end_date}</div>
+                ${s.notes ? `<div style="font-size:0.75rem; color:#64748b; margin-top:0.2rem;">${escapeHtml(s.notes)}</div>` : ''}
+                <div style="margin-top:0.5rem;">
+                  <a href="https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lon}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#0284c7; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600; display:inline-block;">
+                    📍 Google Maps Directions ↗
+                  </a>
+                </div>
+              </div>
+            `);
+        }
+      });
+    }
+
+    // Filter Items
+    let filteredItems = data.items;
+    if (cityFilter !== "all") {
+      filteredItems = filteredItems.filter(it => it.city_id === cityFilter);
+    }
+    if (dayFilter !== "all") {
+      if (dayFilter === "todo") {
+        filteredItems = filteredItems.filter(it => !it.assigned_date || it.assigned_date === "todo");
+      } else {
+        filteredItems = filteredItems.filter(it => it.assigned_date === dayFilter);
+      }
+    }
+
+    const validItems = filteredItems.filter(it => it.lat && it.lon);
+
     const sidebarList = document.getElementById("mapSidebarList");
     const sidebarCount = document.getElementById("mapSidebarCount");
-    if (sidebarCount) sidebarCount.textContent = `${data.items.length} Stops`;
+    if (sidebarCount) sidebarCount.textContent = `${validItems.length} Stops`;
 
-    // Stays / Hotels Markers
-    data.stays.forEach(s => {
-      if (s.lat && s.lon) {
-        const hotelIcon = L.divIcon({
-          className: 'custom-hotel-pin',
-          html: `<div style="background:#0284c7; color:#fff; border:2px solid #fff; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; font-size:14px; box-shadow:0 3px 10px rgba(0,0,0,0.6);">🏨</div>`,
-          iconSize: [30, 30],
-          iconAnchor: [15, 15]
-        });
-
-        L.marker([s.lat, s.lon], { icon: hotelIcon })
-          .addTo(mapMarkersGroup)
-          .bindPopup(`
-            <div style="color:#020617; padding:0.4rem; min-width:180px;">
-              <strong style="color:#0284c7; font-size:1rem;">🏨 ${escapeHtml(s.name)}</strong>
-              <div style="font-size:0.8rem; color:#475569; margin-top:0.2rem;">📍 ${escapeHtml(s.address)}</div>
-              <div style="font-size:0.75rem; color:#d97706; font-weight:bold; margin-top:0.3rem;">📅 Active: ${s.start_date} &rarr; ${s.end_date}</div>
-              ${s.notes ? `<div style="font-size:0.75rem; color:#64748b; margin-top:0.2rem;">${escapeHtml(s.notes)}</div>` : ''}
-              <div style="margin-top:0.5rem;">
-                <a href="https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lon}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#0284c7; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600; display:inline-block;">
-                  📍 Google Maps Directions ↗
-                </a>
-              </div>
-            </div>
-          `);
-      }
-    });
-
-    // Item markers
+    // Item markers & Sequence Numbers
     const sidebarItemsHtml = [];
-    data.items.forEach(it => {
-      if (it.lat && it.lon) {
-        const itemIcon = L.divIcon({
-          className: 'custom-item-pin',
-          html: `<div style="background:#f43f5e; color:#fff; border:2px solid #fff; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; font-size:11px; box-shadow:0 3px 8px rgba(0,0,0,0.5);">📍</div>`,
-          iconSize: [24, 24],
-          iconAnchor: [12, 12]
-        });
+    const routeCoords = [];
 
-        const targetUrl = it.url || `https://www.google.com/search?q=${encodeURIComponent(it.title + ' ' + it.city_name)}`;
+    validItems.forEach((it, idx) => {
+      const stopNumber = idx + 1;
+      routeCoords.push([it.lat, it.lon]);
 
-        L.marker([it.lat, it.lon], { icon: itemIcon })
-          .addTo(mapMarkersGroup)
-          .bindPopup(`
-            <div style="color:#020617; padding:0.4rem; min-width:180px;">
-              <strong style="font-size:0.95rem;">${escapeHtml(it.title)}</strong>
-              <div style="font-size:0.8rem; color:#475569; margin-top:0.2rem;">${escapeHtml(it.city_name)} &bull; ${escapeHtml(it.cost || 'Free')}</div>
-              <div style="font-size:0.75rem; color:#0284c7; margin-top:0.25rem;">👤 Added by: ${escapeHtml(it.added_by.name)}</div>
-              <div style="margin-top:0.5rem; display:flex; gap:0.4rem; flex-wrap:wrap;">
-                <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#0284c7; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;">
-                  🌐 Website ↗
-                </a>
-                <a href="https://www.google.com/maps/search/?api=1&query=${it.lat},${it.lon}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#f59e0b; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;">
-                  📍 Directions ↗
-                </a>
-              </div>
+      const itemIcon = L.divIcon({
+        className: 'custom-item-pin',
+        html: `<div style="background:#f43f5e; color:#fff; border:2px solid #fff; border-radius:50%; width:26px; height:26px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; box-shadow:0 3px 8px rgba(0,0,0,0.5);">${stopNumber}</div>`,
+        iconSize: [26, 26],
+        iconAnchor: [13, 13]
+      });
+
+      const targetUrl = it.url || `https://www.google.com/search?q=${encodeURIComponent(it.title + ' ' + it.city_name)}`;
+
+      L.marker([it.lat, it.lon], { icon: itemIcon })
+        .addTo(mapMarkersGroup)
+        .bindPopup(`
+          <div style="color:#020617; padding:0.4rem; min-width:190px;">
+            <div style="font-size:0.75rem; color:#f43f5e; font-weight:700;">STOP #${stopNumber} &bull; ${it.assigned_date && it.assigned_date !== 'todo' ? `📅 ${it.assigned_date}` : '📋 Bucket List'}</div>
+            <strong style="font-size:0.95rem; margin-top:0.2rem; display:block;">${escapeHtml(it.title)}</strong>
+            <div style="font-size:0.8rem; color:#475569; margin-top:0.2rem;">${escapeHtml(it.city_name)} &bull; ${escapeHtml(it.cost || 'Free')}</div>
+            <div style="font-size:0.75rem; color:#0284c7; margin-top:0.25rem;">👤 Added by: ${escapeHtml(it.added_by.name)}</div>
+            <div style="margin-top:0.5rem; display:flex; gap:0.4rem; flex-wrap:wrap;">
+              <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#0284c7; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;">
+                🌐 Website ↗
+              </a>
+              <a href="https://www.google.com/maps/search/?api=1&query=${it.lat},${it.lon}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#f59e0b; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;">
+                📍 Directions ↗
+              </a>
             </div>
-          `);
-
-        sidebarItemsHtml.push(`
-          <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:6px; padding:0.6rem; cursor:pointer;" onclick="zoomToCoord(${it.lat}, ${it.lon})">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <div style="font-weight:600; font-size:0.85rem; color:var(--text-main);">${escapeHtml(it.title)}</div>
-              <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="color:#38bdf8; font-size:0.75rem; text-decoration:none; padding:0.1rem 0.3rem;" title="Open site">↗</a>
-            </div>
-            <div style="font-size:0.75rem; color:var(--text-muted);">${escapeHtml(it.city_name)} &bull; ${escapeHtml(it.cost || 'Free')}</div>
           </div>
         `);
-      }
+
+      sidebarItemsHtml.push(`
+        <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:6px; padding:0.6rem; cursor:pointer;" onclick="zoomToCoord(${it.lat}, ${it.lon})">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-weight:600; font-size:0.85rem; color:var(--text-main); display:flex; align-items:center; gap:0.4rem;">
+              <span style="background:#f43f5e; color:#fff; border-radius:50%; width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; font-size:10px; font-weight:700;">${stopNumber}</span>
+              <span>${escapeHtml(it.title)}</span>
+            </div>
+            <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="color:#38bdf8; font-size:0.75rem; text-decoration:none; padding:0.1rem 0.3rem;" title="Open site">↗</a>
+          </div>
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">
+            ${escapeHtml(it.city_name)} &bull; ${escapeHtml(it.cost || 'Free')} &bull; ${it.assigned_date && it.assigned_date !== 'todo' ? `📅 ${it.assigned_date}` : '📋 Bucket List'}
+          </div>
+        </div>
+      `);
     });
 
-    if (sidebarList) sidebarList.innerHTML = sidebarItemsHtml.join("");
+    // Draw Day Route Polylines
+    if (drawRoute && routeCoords.length >= 2) {
+      L.polyline(routeCoords, {
+        color: '#38bdf8',
+        weight: 4,
+        opacity: 0.85,
+        dashArray: '6, 8',
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(mapRouteGroup);
+    }
+
+    if (sidebarList) {
+      if (sidebarItemsHtml.length === 0) {
+        sidebarList.innerHTML = `<div style="color:var(--text-muted); font-size:0.82rem; text-align:center; padding:1.5rem 0.5rem;">No stops match the current filters.</div>`;
+      } else {
+        sidebarList.innerHTML = sidebarItemsHtml.join("");
+      }
+    }
     fitMapBounds();
   } catch (err) {
     console.error("Map fetch error:", err);
@@ -2566,6 +2909,299 @@ function fitMapBounds() {
   }
 }
 
+// 12. Collaborative Budget & Expense Tracker
+async function loadTripExpenses() {
+  if (!currentTripId) return;
+  try {
+    const res = await fetch(`/api/trips/${currentTripId}/expenses`, {
+      headers: getAuthHeaders(),
+      credentials: "include"
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const summary = data.summary || {};
+    const expenses = data.expenses || [];
+    const collaborators = data.collaborators || [];
+    const sym = summary.currency === "USD" ? "$" : (summary.currency === "GBP" ? "£" : (summary.currency === "JPY" ? "¥" : "€"));
+
+    // 1. KPI Cards
+    const totalEl = document.getElementById("expenseTotalAmount");
+    if (totalEl) totalEl.textContent = `${sym}${(summary.total_spent || 0).toFixed(2)}`;
+
+    const perPersonEl = document.getElementById("expensePerPersonAmount");
+    if (perPersonEl) perPersonEl.textContent = `${sym}${(summary.per_person || 0).toFixed(2)}`;
+
+    const memberTextEl = document.getElementById("expenseMemberCountText");
+    if (memberTextEl) memberTextEl.textContent = `Split equally among ${summary.member_count || 1} traveler${(summary.member_count || 1) > 1 ? 's' : ''}`;
+
+    // Top Category
+    let topCat = "None";
+    let topCatAmt = 0;
+    const catTotals = summary.category_totals || {};
+    for (const [c, amt] of Object.entries(catTotals)) {
+      if (amt > topCatAmt) {
+        topCat = c;
+        topCatAmt = amt;
+      }
+    }
+    const catLabels = {
+      dining: "🍽️ Dining & Drinks",
+      lodging: "🏨 Lodging",
+      tickets: "🎟️ Tickets & Events",
+      transit: "🚆 Transit & Rides",
+      activities: "🛶 Activities",
+      shopping: "🛍️ Shopping",
+      other: "📦 Other"
+    };
+    const topCatEl = document.getElementById("expenseTopCategory");
+    if (topCatEl) topCatEl.textContent = topCat !== "None" ? (catLabels[topCat] || topCat) : "None";
+    const topCatDetailEl = document.getElementById("expenseTopCategoryDetail");
+    if (topCatDetailEl) topCatDetailEl.textContent = topCatAmt > 0 ? `${sym}${topCatAmt.toFixed(2)} total spend` : "No expenses logged yet";
+
+    // 2. Settlement Table
+    const settlementList = document.getElementById("settlementList");
+    if (settlementList) {
+      const settlements = summary.settlements || [];
+      if (settlements.length === 0) {
+        settlementList.innerHTML = `<div style="color:var(--text-muted); font-size:0.85rem; text-align:center; padding:1rem 0;">🎉 All balances settled! Everyone is even.</div>`;
+      } else {
+        settlementList.innerHTML = settlements.map(s => {
+          const sSym = s.currency === "USD" ? "$" : (s.currency === "GBP" ? "£" : (s.currency === "JPY" ? "¥" : "€"));
+          return `
+            <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:8px; padding:0.6rem 0.85rem;">
+              <div style="font-size:0.85rem;">
+                <strong style="color:#f43f5e;">${escapeHtml(s.from_user)}</strong> owes <strong style="color:#22c55e;">${escapeHtml(s.to_user)}</strong>
+              </div>
+              <div style="font-weight:700; color:#38bdf8; font-size:0.95rem;">
+                ${sSym}${s.amount.toFixed(2)}
+              </div>
+            </div>
+          `;
+        }).join("");
+      }
+    }
+
+    // 3. Category Breakdown Bars
+    const categoryBars = document.getElementById("expenseCategoryBars");
+    if (categoryBars) {
+      const entries = Object.entries(catTotals);
+      if (entries.length === 0) {
+        categoryBars.innerHTML = `<div style="color:var(--text-muted); font-size:0.85rem; text-align:center; padding:1rem 0;">No spending recorded yet.</div>`;
+      } else {
+        const total = summary.total_spent || 1;
+        categoryBars.innerHTML = entries.map(([cat, amt]) => {
+          const pct = Math.min(100, Math.round((amt / total) * 100));
+          const label = catLabels[cat] || cat;
+          return `
+            <div>
+              <div style="display:flex; justify-content:space-between; font-size:0.82rem; margin-bottom:0.25rem;">
+                <span>${label}</span>
+                <span style="font-weight:600;">${sym}${amt.toFixed(2)} (${pct}%)</span>
+              </div>
+              <div style="background:rgba(255,255,255,0.08); border-radius:999px; height:8px; overflow:hidden;">
+                <div style="background:#38bdf8; height:100%; width:${pct}%; border-radius:999px;"></div>
+              </div>
+            </div>
+          `;
+        }).join("");
+      }
+    }
+
+    // 4. Ledger Table
+    const countEl = document.getElementById("expenseLedgerCount");
+    if (countEl) countEl.textContent = `${expenses.length} Expense${expenses.length === 1 ? '' : 's'}`;
+
+    const bodyEl = document.getElementById("expenseLedgerBody");
+    if (bodyEl) {
+      if (expenses.length === 0) {
+        bodyEl.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:2rem; color:var(--text-muted);">No expenses logged yet. Click "Log New Expense" above to add meals, tickets, or transport!</td></tr>`;
+      } else {
+        bodyEl.innerHTML = expenses.map(e => {
+          const eSym = e.currency === "USD" ? "$" : (e.currency === "GBP" ? "£" : (e.currency === "JPY" ? "¥" : "€"));
+          const payerName = e.paid_by?.name || "Traveler";
+          const payerAvatar = e.paid_by?.avatar_color || "#38bdf8";
+          return `
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
+              <td style="padding:0.65rem; color:var(--text-muted); white-space:nowrap; font-size:0.82rem;">${escapeHtml(e.expense_date || '—')}</td>
+              <td style="padding:0.65rem;">
+                <div style="font-weight:600; color:var(--text-main);">${escapeHtml(e.title)}</div>
+                ${e.notes ? `<div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.15rem;">${escapeHtml(e.notes)}</div>` : ''}
+              </td>
+              <td style="padding:0.65rem; font-size:0.82rem; color:#94a3b8;">${catLabels[e.category] || escapeHtml(e.category)}</td>
+              <td style="padding:0.65rem; font-size:0.82rem;">
+                <div style="display:flex; align-items:center; gap:0.4rem;">
+                  <span style="display:inline-block; width:18px; height:18px; border-radius:50%; background:${payerAvatar}; font-size:10px; line-height:18px; text-align:center; color:#fff; font-weight:700;">
+                    ${payerName.slice(0, 1).toUpperCase()}
+                  </span>
+                  <span>${escapeHtml(payerName)}</span>
+                </div>
+              </td>
+              <td style="padding:0.65rem; text-align:right; font-weight:700; color:#38bdf8; font-size:0.92rem;">
+                ${eSym}${e.amount.toFixed(2)}
+              </td>
+              <td style="padding:0.65rem; text-align:center;">
+                <button type="button" onclick="deleteExpense('${e.id}')" style="background:none; border:none; color:#f43f5e; cursor:pointer; font-size:1.1rem; padding:0.2rem;" title="Delete expense">&times;</button>
+              </td>
+            </tr>
+          `;
+        }).join("");
+      }
+    }
+
+    // 5. Populate payer select in Add Expense Modal
+    const payerSelect = document.getElementById("expensePayerSelect");
+    if (payerSelect) {
+      payerSelect.innerHTML = collaborators.map(c => `
+        <option value="${c.id}" ${currentUser && currentUser.id === c.id ? 'selected' : ''}>${escapeHtml(c.name)} (${escapeHtml(c.email)})</option>
+      `).join("");
+    }
+  } catch (err) {
+    console.error("Failed to load trip expenses:", err);
+  }
+}
+
+window.deleteExpense = async function(expenseId) {
+  if (!confirm("Are you sure you want to remove this expense from the group budget?")) return;
+  try {
+    const res = await fetch(`/api/trips/${currentTripId}/expenses/${expenseId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+      credentials: "include"
+    });
+    if (res.ok) {
+      await loadTripExpenses();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      alert("Failed to delete expense: " + (err.detail || res.statusText));
+    }
+  } catch (err) {
+    alert("Error deleting expense: " + err.message);
+  }
+};
+
+function initExpenseTracker() {
+  const modal = document.getElementById("addExpenseModal");
+  const openBtn = document.getElementById("openAddExpenseBtn");
+  const cancelBtn = document.getElementById("cancelAddExpenseBtn");
+  const form = document.getElementById("addExpenseForm");
+
+  if (openBtn) {
+    openBtn.addEventListener("click", () => {
+      if (modal) {
+        const dateInput = document.getElementById("expenseDateInput");
+        if (dateInput && !dateInput.value) {
+          dateInput.value = new Date().toISOString().split("T")[0];
+        }
+        modal.style.display = "flex";
+      }
+    });
+  }
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", () => {
+      if (modal) modal.style.display = "none";
+    });
+  }
+  if (form) {
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const payload = {
+        title: document.getElementById("expenseTitleInput").value.trim(),
+        amount: parseFloat(document.getElementById("expenseAmountInput").value),
+        currency: document.getElementById("expenseCurrencySelect").value,
+        category: document.getElementById("expenseCategorySelect").value,
+        paid_by_user_id: document.getElementById("expensePayerSelect")?.value || (currentUser ? currentUser.id : null),
+        expense_date: document.getElementById("expenseDateInput").value || null,
+        notes: document.getElementById("expenseNotesInput").value.trim()
+      };
+
+      try {
+        const res = await fetch(`/api/trips/${currentTripId}/expenses`, {
+          method: "POST",
+          headers: getAuthHeaders({ "Content-Type": "application/json" }),
+          credentials: "include",
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          if (modal) modal.style.display = "none";
+          form.reset();
+          await loadTripExpenses();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          alert("Failed to save expense: " + (err.detail || res.statusText));
+        }
+      } catch (err) {
+        alert("Error saving expense: " + err.message);
+      }
+    });
+  }
+}
+
+// 13. Reservation & Booking Status Tracker
+window.openBookingModal = function(itemId, title, status, ref) {
+  const itemIdInput = document.getElementById("bookingItemId");
+  const itemTitleInput = document.getElementById("bookingItemTitle");
+  const statusSelect = document.getElementById("bookingStatusSelect");
+  const refInput = document.getElementById("bookingRefInput");
+  const modal = document.getElementById("editBookingModal");
+
+  if (itemIdInput) itemIdInput.value = itemId;
+  if (itemTitleInput) itemTitleInput.value = title || "Itinerary Stop";
+  if (statusSelect) statusSelect.value = status || "unbooked";
+  if (refInput) refInput.value = ref || "";
+  if (modal) modal.style.display = "flex";
+};
+
+function initBookingModal() {
+  const modal = document.getElementById("editBookingModal");
+  const closeBtn = document.getElementById("closeEditBookingBtn");
+  const cancelBtn = document.getElementById("cancelEditBookingBtn");
+  const form = document.getElementById("editBookingForm");
+
+  if (closeBtn) closeBtn.addEventListener("click", () => modal.style.display = "none");
+  if (cancelBtn) cancelBtn.addEventListener("click", () => modal.style.display = "none");
+
+  if (form) {
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const itemId = document.getElementById("bookingItemId").value;
+      const status = document.getElementById("bookingStatusSelect").value;
+      const ref = document.getElementById("bookingRefInput").value.trim();
+
+      try {
+        const res = await fetch(`/api/trips/${currentTripId}/items/${itemId}/booking`, {
+          method: "PUT",
+          headers: getAuthHeaders({ "Content-Type": "application/json" }),
+          credentials: "include",
+          body: JSON.stringify({ booking_status: status, booking_ref: ref })
+        });
+        if (res.ok) {
+          modal.style.display = "none";
+          await refreshTrip();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          alert("Failed to update booking status: " + (err.detail || res.statusText));
+        }
+      } catch (err) {
+        alert("Error updating booking status: " + err.message);
+      }
+    });
+  }
+}
+
+// 14. One-Click Calendar Sync (.ics Export)
+function initCalendarExport() {
+  const btn = document.getElementById("exportCalendarBtn");
+  if (btn) {
+    btn.addEventListener("click", () => {
+      if (!currentTripId) {
+        alert("Please select or create an itinerary first.");
+        return;
+      }
+      window.location.href = `/api/trips/${currentTripId}/export/calendar.ics`;
+    });
+  }
+}
+
 function escapeHtml(str) {
   if (!str) return "";
   return String(str).replace(/[&<>"']/g, m => ({
@@ -2586,3 +3222,4 @@ function sanitizeUrl(rawUrl) {
     return "";
   }
 }
+
