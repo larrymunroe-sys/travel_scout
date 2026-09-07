@@ -1351,3 +1351,123 @@ body {
   border: 1px solid rgba(56, 189, 248, 0.3);
 }
 
+/* ==================== BULK SELECTION MODE ==================== */
+body.bulk-select-active .itin-card,
+body.bulk-select-active .card {
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.15s ease, border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+body.bulk-select-active .card-bulk-checkbox-wrapper {
+  display: flex !important;
+}
+
+.card-bulk-checkbox-wrapper {
+  display: none;
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  z-index: 25;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1.5px solid rgba(56, 189, 248, 0.4);
+  border-radius: 8px;
+  padding: 0.3rem 0.45rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: all 0.2s ease;
+}
+
+.card-bulk-checkbox-wrapper:hover {
+  border-color: #38bdf8;
+  transform: scale(1.08);
+}
+
+.card-bulk-checkbox {
+  width: 1.25rem;
+  height: 1.25rem;
+  accent-color: #38bdf8;
+  cursor: pointer;
+  margin: 0;
+}
+
+.bulk-card-selected {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.7), 0 8px 24px rgba(56, 189, 248, 0.25) !important;
+  background: rgba(56, 189, 248, 0.07) !important;
+}
+
+.bulk-card-selected .card-bulk-checkbox-wrapper {
+  background: #0284c7;
+  border-color: #38bdf8;
+}
+
+/* Floating Docked Bulk Action Bar */
+.bulk-action-bar {
+  position: fixed;
+  bottom: 1.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  width: 90%;
+  max-width: 720px;
+  animation: slideUpBulkBar 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUpBulkBar {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.bulk-action-bar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 9999px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 24px rgba(56, 189, 248, 0.25);
+  padding: 0.55rem 1.15rem;
+}
+
+.bulk-info-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #f8fafc;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.bulk-action-btns {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .bulk-action-bar {
+    bottom: 1rem;
+    width: 95%;
+  }
+  .bulk-action-bar-inner {
+    border-radius: 16px;
+    padding: 0.65rem 0.85rem;
+    justify-content: center;
+  }
+}
+

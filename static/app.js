@@ -87,6 +87,10 @@ function initTabs() {
       const section = document.getElementById(`tab-${target}`);
       if (section) section.classList.add("active");
 
+      if (window.isBulkSelectMode) {
+        exitBulkSelectMode();
+      }
+
       if (target === "scout") {
         syncScoutCityWithItinerary();
       }
@@ -857,6 +861,9 @@ function renderItineraryTab() {
   }).join("");
 
   attachCardEventListeners();
+  if (window.isBulkSelectMode) {
+    updateBulkActionBarUI();
+  }
 }
 
 function buildCardTransitBox(transit) {
@@ -980,9 +987,13 @@ function renderCard(item, availableDates) {
   }
 
   const sourceLabel = item.source_platform ? escapeHtml(item.source_platform) : "Website";
+  const isSelected = Boolean(window.isBulkSelectMode && window.selectedBulkItemIds && window.selectedBulkItemIds.has(item.id));
 
   return `
-    <div class="itin-card" data-item-id="${item.id}">
+    <div class="itin-card ${isSelected ? 'bulk-card-selected' : ''}" data-item-id="${item.id}" onclick="handleCardBulkClick(event, '${item.id}')">
+      <div class="card-bulk-checkbox-wrapper" onclick="event.stopPropagation()">
+        <input type="checkbox" class="card-bulk-checkbox" id="bulk-cb-${item.id}" data-bulk-id="${item.id}" ${isSelected ? 'checked' : ''} onchange="toggleCardSelection('${item.id}', this.checked)">
+      </div>
       <div class="card-top-row">
         <div>
           <div class="card-title">
@@ -1200,6 +1211,276 @@ async function deleteItem(itemId) {
   }
 }
 window.deleteItem = deleteItem;
+
+// ==================== BULK CARD SELECTION & DELETION ====================
+
+window.isBulkSelectMode = false;
+window.selectedBulkItemIds = new Set();
+window.bulkSelectScope = "itinerary"; // 'itinerary' | 'explore'
+
+function toggleBulkSelectMode(scope) {
+  if (window.isBulkSelectMode) {
+    if (scope && scope !== window.bulkSelectScope) {
+      window.bulkSelectScope = scope;
+      window.selectedBulkItemIds.clear();
+      updateAllCardsBulkState();
+      updateBulkActionBarUI();
+      return;
+    }
+    exitBulkSelectMode();
+  } else {
+    enterBulkSelectMode(scope || "itinerary");
+  }
+}
+window.toggleBulkSelectMode = toggleBulkSelectMode;
+
+function enterBulkSelectMode(scope) {
+  window.isBulkSelectMode = true;
+  window.bulkSelectScope = scope || "itinerary";
+  if (!window.selectedBulkItemIds) {
+    window.selectedBulkItemIds = new Set();
+  } else {
+    window.selectedBulkItemIds.clear();
+  }
+
+  document.body.classList.add("bulk-select-active");
+
+  const bar = document.getElementById("bulkActionBar");
+  if (bar) bar.style.display = "block";
+
+  updateBulkButtonsText(true);
+  updateAllCardsBulkState();
+  updateBulkActionBarUI();
+}
+window.enterBulkSelectMode = enterBulkSelectMode;
+
+function exitBulkSelectMode() {
+  window.isBulkSelectMode = false;
+  if (window.selectedBulkItemIds) {
+    window.selectedBulkItemIds.clear();
+  }
+
+  document.body.classList.remove("bulk-select-active");
+
+  const bar = document.getElementById("bulkActionBar");
+  if (bar) bar.style.display = "none";
+
+  updateBulkButtonsText(false);
+  updateAllCardsBulkState();
+}
+window.exitBulkSelectMode = exitBulkSelectMode;
+
+function updateBulkButtonsText(isActive) {
+  const exploreBtn = document.getElementById("exploreBulkSelectBtn");
+  const itinBtn = document.getElementById("itineraryBulkSelectBtn");
+  const todoBtn = document.getElementById("todoBulkSelectBtn");
+
+  if (isActive) {
+    if (exploreBtn) exploreBtn.innerHTML = "✕ Cancel Select";
+    if (itinBtn) itinBtn.innerHTML = "✕ Cancel Select";
+    if (todoBtn) todoBtn.innerHTML = "✕ Cancel Select";
+  } else {
+    if (exploreBtn) exploreBtn.innerHTML = "☑️ Bulk Select";
+    if (itinBtn) itinBtn.innerHTML = "☑️ Bulk Select";
+    if (todoBtn) todoBtn.innerHTML = "☑️ Bulk Select";
+  }
+}
+
+function getVisibleBulkCardIds() {
+  const ids = [];
+  let containers = [];
+  if (window.bulkSelectScope === "explore") {
+    const grid = document.getElementById("exploreCardsGrid");
+    if (grid) containers.push(grid);
+  } else {
+    const days = document.getElementById("daysContainer");
+    const todo = document.getElementById("todoGrid");
+    if (days) containers.push(days);
+    if (todo) containers.push(todo);
+  }
+
+  containers.forEach(container => {
+    const cards = container.querySelectorAll("[data-item-id]");
+    cards.forEach(card => {
+      if (card.offsetParent !== null) {
+        const id = card.getAttribute("data-item-id");
+        if (id && !ids.includes(id)) {
+          ids.push(id);
+        }
+      }
+    });
+  });
+  return ids;
+}
+
+function handleCardBulkClick(event, itemId) {
+  if (!window.isBulkSelectMode) return;
+  // Ignore clicks on interactive controls
+  if (event.target.closest('a, button, select, input, textarea, .btn-booking-status, .badge-clickable, .btn-add-note, .btn-note-edit, .btn-note-delete')) {
+    return;
+  }
+  event.preventDefault();
+  const isNowSelected = !window.selectedBulkItemIds.has(itemId);
+  toggleCardSelection(itemId, isNowSelected);
+}
+window.handleCardBulkClick = handleCardBulkClick;
+
+function toggleCardSelection(itemId, forceState) {
+  if (!window.selectedBulkItemIds) {
+    window.selectedBulkItemIds = new Set();
+  }
+
+  const shouldSelect = typeof forceState === "boolean" 
+    ? forceState 
+    : !window.selectedBulkItemIds.has(itemId);
+
+  if (shouldSelect) {
+    window.selectedBulkItemIds.add(itemId);
+  } else {
+    window.selectedBulkItemIds.delete(itemId);
+  }
+
+  document.querySelectorAll(`[data-item-id="${itemId}"]`).forEach(card => {
+    if (shouldSelect) {
+      card.classList.add("bulk-card-selected");
+    } else {
+      card.classList.remove("bulk-card-selected");
+    }
+  });
+
+  document.querySelectorAll(`input.card-bulk-checkbox[data-bulk-id="${itemId}"]`).forEach(cb => {
+    cb.checked = shouldSelect;
+  });
+
+  updateBulkActionBarUI();
+}
+window.toggleCardSelection = toggleCardSelection;
+
+function updateAllCardsBulkState() {
+  const allCards = document.querySelectorAll("[data-item-id]");
+  allCards.forEach(card => {
+    const id = card.getAttribute("data-item-id");
+    const isSelected = Boolean(window.isBulkSelectMode && window.selectedBulkItemIds && window.selectedBulkItemIds.has(id));
+    if (isSelected) {
+      card.classList.add("bulk-card-selected");
+    } else {
+      card.classList.remove("bulk-card-selected");
+    }
+
+    const cb = card.querySelector(`input.card-bulk-checkbox[data-bulk-id="${id}"]`);
+    if (cb) {
+      cb.checked = isSelected;
+    }
+  });
+}
+
+function updateBulkActionBarUI() {
+  const bar = document.getElementById("bulkActionBar");
+  if (!bar) return;
+
+  const count = window.selectedBulkItemIds ? window.selectedBulkItemIds.size : 0;
+  const visibleIds = getVisibleBulkCardIds();
+  const totalVisible = visibleIds.length;
+
+  const countEl = document.getElementById("bulkSelectCount");
+  const totalVisibleEl = document.getElementById("bulkSelectTotalVisible");
+  const deleteBtnCountEl = document.getElementById("bulkDeleteBtnCount");
+  const deleteBtn = document.getElementById("bulkDeleteConfirmBtn");
+
+  if (countEl) countEl.textContent = count;
+  if (totalVisibleEl) totalVisibleEl.textContent = totalVisible;
+  if (deleteBtnCountEl) deleteBtnCountEl.textContent = count;
+
+  if (deleteBtn) {
+    if (count > 0) {
+      deleteBtn.disabled = false;
+      deleteBtn.style.opacity = "1";
+      deleteBtn.style.cursor = "pointer";
+    } else {
+      deleteBtn.disabled = true;
+      deleteBtn.style.opacity = "0.5";
+      deleteBtn.style.cursor = "not-allowed";
+    }
+  }
+}
+
+function bulkSelectAllVisible() {
+  if (!window.selectedBulkItemIds) {
+    window.selectedBulkItemIds = new Set();
+  }
+  const visibleIds = getVisibleBulkCardIds();
+  visibleIds.forEach(id => {
+    window.selectedBulkItemIds.add(id);
+  });
+  updateAllCardsBulkState();
+  updateBulkActionBarUI();
+}
+window.bulkSelectAllVisible = bulkSelectAllVisible;
+
+function bulkDeselectAll() {
+  if (window.selectedBulkItemIds) {
+    window.selectedBulkItemIds.clear();
+  }
+  updateAllCardsBulkState();
+  updateBulkActionBarUI();
+}
+window.bulkDeselectAll = bulkDeselectAll;
+
+async function confirmBulkDelete() {
+  if (!window.selectedBulkItemIds || window.selectedBulkItemIds.size === 0) {
+    alert("Please select at least one card to delete.");
+    return;
+  }
+
+  const count = window.selectedBulkItemIds.size;
+  const msg = count === 1
+    ? "Are you sure you want to permanently delete this card from the itinerary?"
+    : `Are you sure you want to permanently delete all ${count} selected cards from the itinerary? This action cannot be undone.`;
+
+  if (!confirm(msg)) {
+    return;
+  }
+
+  const deleteBtn = document.getElementById("bulkDeleteConfirmBtn");
+  const originalText = deleteBtn ? deleteBtn.innerHTML : "";
+  if (deleteBtn) {
+    deleteBtn.disabled = true;
+    deleteBtn.innerHTML = `⏳ Deleting (${count})...`;
+  }
+
+  try {
+    const itemIds = Array.from(window.selectedBulkItemIds);
+    const res = await fetch(`/api/trips/${currentTripId}/items/bulk-delete`, {
+      method: "POST",
+      headers: {
+        ...getAuthHeaders(),
+        "Content-Type": "application/json"
+      },
+      credentials: "include",
+      body: JSON.stringify({ item_ids: itemIds })
+    });
+
+    if (res.ok) {
+      exitBulkSelectMode();
+      await refreshTrip();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      alert("Failed to delete selected cards: " + (err.detail || res.statusText));
+      if (deleteBtn) {
+        deleteBtn.disabled = false;
+        deleteBtn.innerHTML = originalText;
+      }
+    }
+  } catch (err) {
+    alert("Error executing bulk delete: " + err.message);
+    if (deleteBtn) {
+      deleteBtn.disabled = false;
+      deleteBtn.innerHTML = originalText;
+    }
+  }
+}
+window.confirmBulkDelete = confirmBulkDelete;
+
 
 // ==================== EXPLORE & DISCOVER IMPLEMENTATION ====================
 
@@ -1454,6 +1735,9 @@ function renderExploreTab(populateDropdowns = true) {
 
   grid.innerHTML = filtered.map(item => renderExploreCard(item, availDates)).join("");
   attachExploreCardEvents();
+  if (window.isBulkSelectMode) {
+    updateBulkActionBarUI();
+  }
 }
 
 function renderExploreCard(item, availableDates) {
@@ -1527,9 +1811,13 @@ function renderExploreCard(item, availableDates) {
   }
 
   const sourceLabel = item.source_platform ? escapeHtml(item.source_platform) : "Website";
+  const isSelected = Boolean(window.isBulkSelectMode && window.selectedBulkItemIds && window.selectedBulkItemIds.has(item.id));
 
   return `
-    <div class="card" id="explore-card-${item.id}" data-item-id="${item.id}">
+    <div class="card ${isSelected ? 'bulk-card-selected' : ''}" id="explore-card-${item.id}" data-item-id="${item.id}" onclick="handleCardBulkClick(event, '${item.id}')">
+      <div class="card-bulk-checkbox-wrapper" onclick="event.stopPropagation()">
+        <input type="checkbox" class="card-bulk-checkbox" id="bulk-cb-${item.id}" data-bulk-id="${item.id}" ${isSelected ? 'checked' : ''} onchange="toggleCardSelection('${item.id}', this.checked)">
+      </div>
       <div>
         <!-- Card Top & Clickable Filter Badges -->
         <div class="card-top">

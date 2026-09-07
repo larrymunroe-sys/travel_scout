@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="/static/styles.css?v=3.1" />
+  <link rel="stylesheet" href="/static/styles.css?v=3.2" />
   <link rel="manifest" href="/static/manifest.json" />
   <meta name="theme-color" content="#0284c7" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -192,7 +192,11 @@
           <button type="button" class="btn btn-primary btn-sm" onclick="openAddItemModal('todo')" style="font-size:0.8rem; font-weight:600; padding:0.25rem 0.75rem;" title="Add a custom activity, venue, or stop to your itinerary">
             ➕ Add Custom Item
           </button>
+          <button type="button" id="exploreBulkSelectBtn" class="btn btn-secondary btn-sm" onclick="toggleBulkSelectMode('explore')" style="font-size:0.8rem; font-weight:600; padding:0.25rem 0.75rem;" title="Select multiple cards to delete">
+            ☑️ Bulk Select
+          </button>
         </div>
+
 
         <div class="legend" style="display:flex; gap:0.5rem; flex-wrap:wrap; font-size:0.75rem;">
           <span class="badge badge-curated">🏛️ Curated</span>
@@ -245,7 +249,9 @@
           <button id="openAddItemBtn" type="button" class="btn btn-primary" onclick="openAddItemModal('todo')" title="Add a custom activity, venue, or stop to your itinerary">
             ➕ Add Custom Item
           </button>
-
+          <button id="itineraryBulkSelectBtn" type="button" class="btn btn-secondary btn-sm" onclick="toggleBulkSelectMode('itinerary')" style="font-size:0.8rem; font-weight:600;" title="Select multiple cards to delete">
+            ☑️ Bulk Select
+          </button>
         </div>
       </div>
 
@@ -254,9 +260,14 @@
         <div class="todo-header" style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
           <h3>📋 Unscheduled Bucket List &amp; To-Do</h3>
           <span class="badge" id="todoCountBadge">0 Items</span>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="openAddItemModal('todo')" style="margin-left:auto; font-size:0.75rem; padding:0.22rem 0.6rem;" title="Add an activity or stop to your bucket list">
-            ➕ Add Wishlist Card
-          </button>
+          <div style="margin-left:auto; display:flex; gap:0.4rem; align-items:center;">
+            <button type="button" id="todoBulkSelectBtn" class="btn btn-secondary btn-sm" onclick="toggleBulkSelectMode('itinerary')" style="font-size:0.75rem; padding:0.22rem 0.6rem;" title="Select multiple wishlist cards to delete">
+              ☑️ Bulk Select
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openAddItemModal('todo')" style="font-size:0.75rem; padding:0.22rem 0.6rem;" title="Add an activity or stop to your bucket list">
+              ➕ Add Wishlist Card
+            </button>
+          </div>
         </div>
         <div id="todoGrid" class="cards-grid">
           <!-- Injected via JavaScript -->
@@ -1256,6 +1267,28 @@
         </div>
       </form>
     </div>
+  <!-- Floating Docked Bulk Action Bar -->
+  <div id="bulkActionBar" class="bulk-action-bar" style="display:none;">
+    <div class="bulk-action-bar-inner">
+      <div class="bulk-info-pill">
+        <span class="bulk-icon">☑️</span>
+        <span id="bulkSelectCountText"><strong id="bulkSelectCount">0</strong> selected</span>
+      </div>
+      <div class="bulk-action-btns">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="bulkSelectAllVisible()" title="Select all cards in current view">
+          Select All (<span id="bulkSelectTotalVisible">0</span>)
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="bulkDeselectAll()" title="Clear all selections">
+          Deselect All
+        </button>
+        <button type="button" class="btn btn-danger btn-sm" id="bulkDeleteConfirmBtn" onclick="confirmBulkDelete()" disabled style="background:#e11d48; color:#fff; border:1px solid #f43f5e; font-weight:700; cursor:not-allowed; opacity:0.5;" title="Permanently delete all selected cards">
+          🗑️ Delete Selected (<span id="bulkDeleteBtnCount">0</span>)
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="exitBulkSelectMode()" style="opacity:0.85;" title="Exit bulk selection">
+          ✕ Cancel
+        </button>
+      </div>
+    </div>
   </div>
 
   <footer class="app-footer">
@@ -1263,7 +1296,7 @@
   </footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/app.js?v=3.1"></script>
+  <script src="/static/app.js?v=3.2"></script>
 </body>
 </html>
 

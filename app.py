@@ -357,6 +357,9 @@ class UpdateItemPayload(BaseModel):
 class UpdateNotePayload(BaseModel):
     personal_note: str
 
+class BulkDeleteItemsPayload(BaseModel):
+    item_ids: List[str]
+
 class InviteCollaboratorPayload(BaseModel):
     email: str
     name: Optional[str] = None
@@ -1561,8 +1564,43 @@ async def update_item_booking(
         "booking_ref": item.booking_ref
     }
 
-@app.delete("/api/trips/{trip_id}/items/{item_id}")
+@app.post("/api/trips/{trip_id}/items/bulk-delete")
+async def bulk_delete_itinerary_items(
+    trip_id: str,
+    payload: BulkDeleteItemsPayload,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Permanently delete multiple itinerary stops or discoveries in bulk."""
+    user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=True)
 
+    if not payload.item_ids:
+        return {"status": "noop", "deleted_count": 0, "item_ids": []}
+
+    deleted_count = db.query(ItineraryItem).filter(
+        ItineraryItem.trip_id == trip_id,
+        ItineraryItem.id.in_(payload.item_ids)
+    ).delete(synchronize_session=False)
+
+    db.commit()
+    return {
+        "status": "deleted",
+        "deleted_count": deleted_count,
+        "item_ids": payload.item_ids
+    }
+
+@app.delete("/api/trips/{trip_id}/items/bulk")
+async def bulk_delete_itinerary_items_delete(
+    trip_id: str,
+    payload: BulkDeleteItemsPayload,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """DELETE method alias for bulk deleting itinerary stops."""
+    return await bulk_delete_itinerary_items(trip_id, payload, request, db)
+
+@app.delete("/api/trips/{trip_id}/items/{item_id}")
 async def delete_itinerary_item(trip_id: str, item_id: str, request: Request, db: Session = Depends(get_db)):
     user = get_current_user(request, db)
     check_trip_access(trip_id, user, db, require_edit=True)
