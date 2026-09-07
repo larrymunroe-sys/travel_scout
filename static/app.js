@@ -859,6 +859,85 @@ function renderItineraryTab() {
   attachCardEventListeners();
 }
 
+function buildCardTransitBox(transit) {
+  if (!transit || (!transit.miles && !transit.transit_line && !transit.walk_time)) {
+    return '';
+  }
+
+  const isWalkable = Boolean(transit.is_walkable);
+  const stayName = escapeHtml(transit.stay_name || 'Hotel');
+  const transitLine = escapeHtml(transit.transit_line || 'Local Transit');
+  const busRoutes = transit.bus_routes ? escapeHtml(transit.bus_routes) : '';
+  const transitDetails = transit.transit_details ? escapeHtml(transit.transit_details) : '';
+  const fareTip = transit.fare_tip ? escapeHtml(transit.fare_tip) : '';
+  const walkTime = escapeHtml(transit.walk_time || '');
+  const walkLabel = escapeHtml(transit.walk_label || (isWalkable ? 'Walkable' : 'Transit Advised'));
+  const miles = transit.miles ? `${transit.miles} mi` : '';
+  const rideshare = transit.rideshare_estimate ? escapeHtml(transit.rideshare_estimate) : '';
+
+  const transitUrl = transit.transit_url ? escapeHtml(transit.transit_url) : '';
+  const walkingUrl = transit.walking_url ? escapeHtml(transit.walking_url) : '';
+
+  return `
+    <div class="card-transit-box">
+      <!-- Top Header Row: Recommended Mode & Stay Reference -->
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap; margin-bottom:0.35rem;">
+        <div style="font-weight:700; font-size:0.82rem; color:#38bdf8; display:flex; align-items:center; gap:0.35rem;">
+          <span>${escapeHtml(transit.best_mode || 'Transit / Walk')}</span>
+        </div>
+        <div style="font-size:0.72rem; color:var(--text-muted);">
+          📍 From <strong>${stayName}</strong>
+        </div>
+      </div>
+
+      <!-- Bus & Public Transit Row -->
+      ${transit.transit_line ? `
+        <div style="font-size:0.78rem; color:#bae6fd; margin-bottom:0.35rem; line-height:1.4; display:flex; align-items:flex-start; gap:0.4rem;">
+          <span style="font-size:0.95rem; line-height:1; flex-shrink:0;">🚌</span>
+          <div style="flex:1;">
+            <div>
+              <strong style="color:#ffffff;">${transitLine}</strong>
+              ${transit.transit_time ? `<span style="color:#38bdf8; font-weight:600; margin-left:0.3rem;">(~${escapeHtml(transit.transit_time)})</span>` : ''}
+            </div>
+            ${busRoutes ? `<div style="font-size:0.72rem; color:#93c5fd; margin-top:0.1rem;"><strong>Bus Lines:</strong> ${busRoutes}</div>` : ''}
+            ${transitDetails ? `<div style="font-size:0.72rem; color:#cbd5e1; margin-top:0.15rem;">${transitDetails}</div>` : ''}
+            ${fareTip ? `<div style="font-size:0.70rem; color:#6ee7b7; margin-top:0.15rem;">💳 ${fareTip}</div>` : ''}
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- Walking & Rideshare Bottom Row -->
+      <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; color:#cbd5e1; border-top:1px dashed rgba(255,255,255,0.08); padding-top:0.35rem; margin-top:0.35rem; flex-wrap:wrap; gap:0.4rem;">
+        <div style="display:flex; align-items:center; gap:0.4rem;">
+          <span>🚶 <strong>${miles}</strong> (${walkTime})</span>
+          <span style="color:${isWalkable ? '#4ade80' : '#f59e0b'}; font-size:0.70rem; font-weight:600; padding:0.1rem 0.35rem; background:${isWalkable ? 'rgba(34,197,94,0.12)' : 'rgba(245,158,11,0.12)'}; border-radius:4px;">
+            ${walkLabel}
+          </span>
+        </div>
+        ${rideshare ? `
+          <div style="font-size:0.70rem; color:var(--text-muted);" title="Estimated rideshare duration and fare">
+            🚕 ${rideshare}
+          </div>
+        ` : ''}
+      </div>
+
+      <!-- Action Navigation Buttons (Google Maps Live Transit & Walking) -->
+      <div style="margin-top:0.45rem; display:flex; gap:0.4rem; flex-wrap:wrap;">
+        ${transitUrl ? `
+          <a href="${transitUrl}" target="_blank" rel="noopener noreferrer" class="transit-action-btn bus" style="font-size:0.72rem; padding:0.25rem 0.6rem; border-radius:6px; font-weight:600; display:inline-flex; align-items:center; gap:0.3rem;" title="Open real-time Bus &amp; Transit Directions in Google Maps">
+            🚌 Bus &amp; Transit Directions ↗
+          </a>
+        ` : ''}
+        ${walkingUrl ? `
+          <a href="${walkingUrl}" target="_blank" rel="noopener noreferrer" class="transit-action-btn walk" style="font-size:0.72rem; padding:0.25rem 0.6rem; border-radius:6px; font-weight:600; display:inline-flex; align-items:center; gap:0.3rem;" title="Open Walking Route in Google Maps">
+            🚶 Walking Route ↗
+          </a>
+        ` : ''}
+      </div>
+    </div>
+  `;
+}
+
 function renderCard(item, availableDates) {
   const author = item.added_by || { name: "Traveler", avatar_color: "#38bdf8" };
   const transit = item.transit || {};
@@ -927,11 +1006,9 @@ function renderCard(item, availableDates) {
         </div>
       </div>
 
-      <!-- Date-Matched Hotel Transit Box -->
-      <div class="card-transit-box">
-        <div>🚶 <strong>${transit.miles || '?'} mi from ${escapeHtml(transit.stay_name || 'hotel')}</strong> (${transit.walk_time || ''})</div>
-        <div style="font-size:0.75rem; margin-top:0.15rem;">${escapeHtml(transit.best_mode || transit.summary || '')}</div>
-      </div>
+      <!-- Date-Matched Hotel Transit & Bus Box -->
+      ${buildCardTransitBox(transit)}
+
 
       ${item.highlight ? `
         <div style="font-size:0.82rem; color:#cbd5e1; line-height:1.4;">
@@ -1440,9 +1517,14 @@ function renderExploreCard(item, availableDates) {
     ? `<span class="badge badge-web" title="Scout Source">${sourceIcon} ${escapeHtml(item.source_platform)}</span>`
     : `<span class="badge badge-curated" title="Curated Essential">🏛️ Curated</span>`;
 
-  const transitBadge = (transit && transit.miles)
-    ? `<span class="badge badge-transit" title="Transit distance from ${escapeHtml(transit.stay_name || 'Stay')}">🚶 ${transit.miles} mi (${escapeHtml(transit.walk_time || '')})</span>`
-    : '';
+  let transitBadge = '';
+  if (transit && transit.miles) {
+    if (transit.is_walkable) {
+      transitBadge = `<span class="badge badge-transit" style="background:rgba(34,197,94,0.15); color:#4ade80; border:1px solid rgba(34,197,94,0.3);" title="Walk from ${escapeHtml(transit.stay_name || 'Stay')}: ${escapeHtml(transit.walk_time || '')}">🚶 ${transit.miles} mi (${escapeHtml(transit.walk_time || '')})</span>`;
+    } else {
+      transitBadge = `<span class="badge badge-transit" style="background:rgba(56,189,248,0.15); color:#38bdf8; border:1px solid rgba(56,189,248,0.3);" title="Transit from ${escapeHtml(transit.stay_name || 'Stay')}: ${escapeHtml(transit.transit_line || 'Transit')}">🚌 ${escapeHtml(transit.transit_time || '')} (~${transit.miles} mi)</span>`;
+    }
+  }
 
   const sourceLabel = item.source_platform ? escapeHtml(item.source_platform) : "Website";
 
@@ -1473,11 +1555,9 @@ function renderExploreCard(item, availableDates) {
           ${item.time_info ? ` &bull; <span style="color:var(--text-dim);">${escapeHtml(item.time_info)}</span>` : ''}
         </div>
 
-        ${transit.miles ? `
-          <div style="background:rgba(56,189,248,0.06); border-left:3px solid #38bdf8; padding:0.4rem 0.65rem; border-radius:0 6px 6px 0; font-size:0.78rem; color:#bae6fd; margin-bottom:0.75rem;">
-            <strong>🚶 Transit from ${escapeHtml(transit.stay_name || 'Stay')}:</strong> ${transit.miles} mi (${escapeHtml(transit.walk_time || '')}) &bull; ${escapeHtml(transit.best_mode || transit.summary || '')}
-          </div>
-        ` : ''}
+        <!-- Hotel Transit & Bus Information Box -->
+        ${buildCardTransitBox(transit)}
+
 
         ${item.description ? `
           <p class="card-desc" style="font-size:0.84rem; color:#cbd5e1; line-height:1.45; margin-bottom:0.65rem;">
@@ -2089,7 +2169,8 @@ function generateFormattedItineraryText(mode = "email") {
         const tr = it.transit ? ` [${it.transit.miles || ''}mi • ${it.transit.walk_time || ''}]` : '';
         lines.push(`${idx + 1}. ${it.title}${tr} - ${it.cost || 'Free'}`);
         if (it.highlight) lines.push(`   "${it.highlight}"`);
-        if (it.transit?.best_mode) lines.push(`   Transit: ${it.transit.best_mode}`);
+        if (it.transit?.transit_line) lines.push(`   🚌 Transit: ${it.transit.transit_line} (${it.transit.transit_time || ''})`);
+        else if (it.transit?.best_mode) lines.push(`   Transit: ${it.transit.best_mode}`);
         if (it.personal_note) lines.push(`   📝 Note: "${it.personal_note}"`);
       });
       lines.push("");
@@ -2146,9 +2227,12 @@ function generateFormattedItineraryText(mode = "email") {
       lines.push(`• Address: ${it.address || 'City Center'}`);
 
       if (it.transit) {
-        lines.push(`• Distance: ${it.transit.miles || '?'} mi from ${it.transit.stay_name || 'hotel'} (${it.transit.walk_time || ''})`);
-        if (it.transit.best_mode) lines.push(`• Recommended Transit: ${it.transit.best_mode}`);
-        if (it.transit.summary) lines.push(`• Transit Tip: ${it.transit.summary}`);
+        lines.push(`• Distance: ${it.transit.miles || '?'} mi from ${it.transit.stay_name || 'hotel'} (${it.transit.walk_time || ''} • ${it.transit.walk_label || 'Walk'})`);
+        if (it.transit.transit_line) lines.push(`• Public Transit: 🚌 ${it.transit.transit_line} (~${it.transit.transit_time || ''})`);
+        if (it.transit.bus_routes) lines.push(`• Bus Routes: ${it.transit.bus_routes}`);
+        if (it.transit.transit_details) lines.push(`• Transit Route: ${it.transit.transit_details}`);
+        if (it.transit.fare_tip) lines.push(`• Fare Tip: ${it.transit.fare_tip}`);
+        if (it.transit.transit_url) lines.push(`• Live Transit Directions: ${it.transit.transit_url}`);
       }
 
       if (it.highlight) lines.push(`• Highlight: "${it.highlight}"`);
@@ -2888,17 +2972,30 @@ async function renderMapLocations() {
       L.marker([it.lat, it.lon], { icon: itemIcon })
         .addTo(mapMarkersGroup)
         .bindPopup(`
-          <div style="color:#020617; padding:0.4rem; min-width:190px;">
+          <div style="color:#020617; padding:0.4rem; min-width:210px;">
             <div style="font-size:0.75rem; color:#f43f5e; font-weight:700;">STOP #${stopNumber} &bull; ${it.assigned_date && it.assigned_date !== 'todo' ? `📅 ${it.assigned_date}` : '📋 Bucket List'}</div>
             <strong style="font-size:0.95rem; margin-top:0.2rem; display:block;">${escapeHtml(it.title)}</strong>
             <div style="font-size:0.8rem; color:#475569; margin-top:0.2rem;">${escapeHtml(it.city_name)} &bull; ${escapeHtml(it.cost || 'Free')}</div>
-            <div style="font-size:0.75rem; color:#0284c7; margin-top:0.25rem;">👤 Added by: ${escapeHtml(it.added_by.name)}</div>
-            <div style="margin-top:0.5rem; display:flex; gap:0.4rem; flex-wrap:wrap;">
-              <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#0284c7; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;">
-                🌐 Website ↗
+            ${it.transit?.transit_line ? `
+              <div style="font-size:0.74rem; color:#0284c7; margin-top:0.3rem; font-weight:600; line-height:1.3;">
+                🚌 ${escapeHtml(it.transit.transit_line)} <span style="font-size:0.70rem; color:#0369a1;">(${escapeHtml(it.transit.transit_time || '')})</span>
+              </div>
+            ` : ''}
+            ${it.transit?.miles ? `
+              <div style="font-size:0.72rem; color:#64748b; margin-top:0.15rem;">
+                🚶 ${it.transit.miles} mi (${escapeHtml(it.transit.walk_time || '')}) &bull; <span style="color:${it.transit.is_walkable ? '#16a34a' : '#d97706'}; font-weight:600;">${it.transit.is_walkable ? 'Walkable' : 'Transit advised'}</span>
+              </div>
+            ` : ''}
+            <div style="font-size:0.72rem; color:#64748b; margin-top:0.2rem;">👤 Added by: ${escapeHtml(it.added_by.name)}</div>
+            <div style="margin-top:0.5rem; display:flex; gap:0.35rem; flex-wrap:wrap;">
+              <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#0284c7; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;" title="Open official website">
+                🌐 Web ↗
               </a>
-              <a href="https://www.google.com/maps/search/?api=1&query=${it.lat},${it.lon}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#f59e0b; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;">
-                📍 Directions ↗
+              <a href="${escapeHtml(it.transit?.transit_url || `https://www.google.com/maps/dir/?api=1&destination=${it.lat},${it.lon}&travelmode=transit`)}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#0ea5e9; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;" title="Live Bus &amp; Transit Directions">
+                🚌 Transit ↗
+              </a>
+              <a href="${escapeHtml(it.transit?.walking_url || `https://www.google.com/maps/dir/?api=1&destination=${it.lat},${it.lon}&travelmode=walking`)}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#10b981; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;" title="Walking Route">
+                🚶 Walk ↗
               </a>
             </div>
           </div>

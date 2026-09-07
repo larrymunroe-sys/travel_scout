@@ -995,14 +995,27 @@ async def get_trip_details(trip_id: str, request: Request, db: Session = Depends
 
         # Resolve active hotel for this item's assigned date
         active_stay = None
-        if seg and seg.stays:
-            active_stay = resolve_stay_for_date(seg.stays, item.assigned_date)
+        effective_seg = seg
+        if not effective_seg and trip.city_segments:
+            addr_check = f"{item.address or ''} {item.neighborhood or ''} {item.title}".lower()
+            for cs in trip.city_segments:
+                if cs.city_name.lower() in addr_check:
+                    effective_seg = cs
+                    break
+            if not effective_seg:
+                effective_seg = trip.city_segments[0]
+
+        if effective_seg and effective_seg.stays:
+            active_stay = resolve_stay_for_date(effective_seg.stays, item.assigned_date)
 
         transit_info = calculate_transit_from_stay(
-            active_stay,
-            item.lat,
-            item.lon,
-            city_name=seg.city_name if seg else "City"
+            stay=active_stay,
+            venue_lat=item.lat,
+            venue_lon=item.lon,
+            city_name=effective_seg.city_name if effective_seg else "City",
+            venue_title=item.title,
+            venue_address=item.address or "",
+            venue_neighborhood=item.neighborhood or ""
         )
 
         note_author = None
@@ -1162,14 +1175,27 @@ async def print_itinerary_view(
         }
 
         active_stay = None
-        if seg and seg.stays:
-            active_stay = resolve_stay_for_date(seg.stays, item.assigned_date)
+        effective_seg = seg
+        if not effective_seg and trip.city_segments:
+            addr_check = f"{item.address or ''} {item.neighborhood or ''} {item.title}".lower()
+            for cs in trip.city_segments:
+                if cs.city_name.lower() in addr_check:
+                    effective_seg = cs
+                    break
+            if not effective_seg:
+                effective_seg = trip.city_segments[0]
+
+        if effective_seg and effective_seg.stays:
+            active_stay = resolve_stay_for_date(effective_seg.stays, item.assigned_date)
 
         transit_info = calculate_transit_from_stay(
-            active_stay,
-            item.lat,
-            item.lon,
-            city_name=seg.city_name if seg else "City"
+            stay=active_stay,
+            venue_lat=item.lat,
+            venue_lon=item.lon,
+            city_name=effective_seg.city_name if effective_seg else "City",
+            venue_title=item.title,
+            venue_address=item.address or "",
+            venue_neighborhood=item.neighborhood or ""
         )
 
         note_author = None

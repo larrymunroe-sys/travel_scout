@@ -48,6 +48,7 @@ GLOBAL_CITY_COORDINATES: Dict[str, Dict[str, Any]] = {
     "stockholm": {"lat": 59.3293, "lon": 18.0686, "country": "Sweden"},
     "oslo": {"lat": 59.9139, "lon": 10.7522, "country": "Norway"},
     "helsinki": {"lat": 60.1699, "lon": 24.9384, "country": "Finland"},
+    "reykjavik": {"lat": 64.1466, "lon": -21.9426, "country": "Iceland"},
 
     # North America
     "new york": {"lat": 40.7128, "lon": -74.0060, "country": "United States"},
