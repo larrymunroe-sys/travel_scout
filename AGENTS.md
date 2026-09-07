@@ -60,6 +60,13 @@ Whenever you modify `static/app.js` or `static/styles.css`:
 - When adding columns to existing tables, ensure `ALTER TABLE` fallback handling or migration checks exist so existing `travel_scout.db` files do not crash on startup.
 - Always use parameterized queries (`?`) to prevent SQL injection.
 
+### Rule 6: Input, Output & Edge Case Specification
+- Never implement features or bugfixes based solely on ambiguous or ungrounded assumptions.
+- **Inputs**: Explicitly confirm data formats (strict ISO dates `YYYY-MM-DD`, geocoding coordinates, payload schemas).
+- **Outputs**: Define the expected user-facing response or API payload (status code, schema, DOM updates).
+- **Edge Cases**: Always handle empty lists (empty itinerary/wishlist), null/missing coordinates, expired session cookies, out-of-range dates, and special characters.
+- Refer to `.agents/PROMPTS.md` for task recipes and prompt templates.
+
 ---
 
 ## 3. Mandatory Verification Workflow
