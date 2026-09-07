@@ -91,7 +91,7 @@
           <button id="logoffBtn" class="btn-logoff" title="Log off active account" style="{% if not current_user %}display:none;{% endif %}">
             🚪 Log Off
           </button>
-          <button id="headerSignInBtn" class="btn btn-primary btn-sm" title="Sign in with your Gmail account" style="padding:0.25rem 0.65rem; font-size:0.75rem; {% if current_user %}display:none;{% endif %}" onclick="window.openLogin ? window.openLogin() : (document.getElementById('loginModal').style.display='flex')">
+          <button id="headerSignInBtn" type="button" class="btn btn-primary btn-sm" title="Sign in with your Gmail account" style="padding:0.25rem 0.65rem; font-size:0.75rem; {% if current_user %}display:none;{% endif %}" onclick="window.openLogin()">
             🔑 Sign In
           </button>
         </div>
@@ -124,6 +124,9 @@
         </p>
       </div>
       <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
+        <button id="bannerSignInBtn" type="button" class="btn btn-primary" style="padding: 0.55rem 1.1rem; font-size: 0.88rem; font-weight:600; display:inline-flex; align-items:center; gap:0.4rem; cursor:pointer;" onclick="window.openLogin()">
+          🔑 Sign In / Choose Profile
+        </button>
         <a href="/auth/google/login" class="btn" style="background: #ffffff; color: #1f2937; font-weight: 600; font-size: 0.85rem; padding: 0.55rem 1rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 0.55rem; text-decoration: none; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
           <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -133,9 +136,6 @@
           </svg>
           Sign in with Google
         </a>
-        <button id="bannerSignInBtn" class="btn btn-secondary" style="padding: 0.55rem 0.9rem; font-size: 0.85rem;" onclick="window.openLogin ? window.openLogin() : (document.getElementById('loginModal').style.display='flex')">
-          Team Profiles &rarr;
-        </button>
       </div>
     </div>
     {% endif %}
@@ -820,12 +820,14 @@
         <button type="button" class="btn btn-secondary" id="closePrintModalBtn2">Close</button>
       </div>
     </div>
+  </div>
+
   <!-- MODAL 8: SIGN IN WITH GMAIL -->
-  <div class="modal-overlay" id="loginModal" style="display:none;">
+  <div class="modal-overlay" id="loginModal" style="display:none;" onclick="if(event.target === this) window.closeLogin();">
     <div class="modal-card" style="max-width:540px;">
       <div class="modal-header">
         <h3>🔑 Sign In to Travel Scout</h3>
-        <button class="modal-close" id="closeLoginModalBtn">&times;</button>
+        <button type="button" class="modal-close" id="closeLoginModalBtn" onclick="window.closeLogin()">&times;</button>
       </div>
       <div style="padding:0.5rem 0; display:flex; flex-direction:column; gap:1.2rem;">
         <p style="font-size:0.85rem; color:var(--text-muted); line-height:1.45;">
@@ -944,6 +946,8 @@
           </div>
         </div>
       </div>
+    </div>
+  </div>
 
   <!-- MODAL 10: LOCAL CITY CULTURAL SCOUT AGENT -->
   <div class="modal-overlay" id="localAgentModal" style="display:none;">
@@ -1259,7 +1263,7 @@
   </footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/app.js?v=2.7"></script>
+  <script src="/static/app.js?v=2.8"></script>
 </body>
 </html>
 

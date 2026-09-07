@@ -15,6 +15,21 @@ let exploreSchedule = "all";
 let exploreFreeOnly = false;
 let exploreDebounceTimer = null;
 
+// Global Sign In Modal Controls
+window.openLogin = function() {
+  const modal = document.getElementById("loginModal");
+  if (modal) {
+    modal.style.display = "flex";
+    const nameInput = document.getElementById("customLoginName");
+    if (nameInput) setTimeout(() => nameInput.focus(), 100);
+  }
+};
+
+window.closeLogin = function() {
+  const modal = document.getElementById("loginModal");
+  if (modal) modal.style.display = "none";
+};
+
 document.addEventListener("DOMContentLoaded", async () => {
   // Check for Google OAuth callback parameters in URL
   const urlParams = new URLSearchParams(window.location.search);
