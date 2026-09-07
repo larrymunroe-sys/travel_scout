@@ -743,22 +743,30 @@ function renderCitiesTab() {
       <div class="stays-subgrid">
         ${city.stays.map(stay => `
           <div class="stay-box">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem;">
               <div class="stay-box-title">
-                <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stay.name + ' ' + stay.address)}" target="_blank" rel="noopener noreferrer" class="card-title-link" title="Open hotel in Google Maps">
+                <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(stay.name + ', ' + stay.address)}" target="_blank" rel="noopener noreferrer" class="card-title-link" title="Get directions to hotel in Google Maps">
                   🏨 ${escapeHtml(stay.name)} <span class="card-link-icon">↗</span>
                 </a>
               </div>
-              ${city.stays.length > 1 ? `
-                <button onclick="deleteStay('${stay.id}')" style="background:none; border:none; color:#f43f5e; cursor:pointer; font-size:0.8rem;" title="Delete this stay">&times;</button>
-              ` : ''}
+              <div style="display:flex; gap:0.35rem; align-items:center;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick='openEditStayModal("${stay.id}", ${JSON.stringify(stay.name).replace(/'/g, "&apos;")}, ${JSON.stringify(stay.address).replace(/'/g, "&apos;")}, "${stay.start_date}", "${stay.end_date}", ${JSON.stringify(stay.notes || "").replace(/'/g, "&apos;")})' style="font-size:0.7rem; padding:0.18rem 0.45rem;" title="Edit hotel name, street address, or dates">
+                  ✏️ Edit
+                </button>
+                ${city.stays.length > 1 ? `
+                  <button onclick="deleteStay('${stay.id}')" style="background:none; border:none; color:#f43f5e; cursor:pointer; font-size:0.85rem; padding:0 0.2rem;" title="Delete this stay">&times;</button>
+                ` : ''}
+              </div>
             </div>
-            <div class="stay-box-dates">Check-in: ${stay.start_date} &bull; Check-out: ${stay.end_date}</div>
-            <div class="stay-box-address">📍 ${escapeHtml(stay.address)}</div>
-            ${stay.notes ? `<div style="font-size:0.75rem; color:#94a3b8; margin-top:0.3rem;"><em>${escapeHtml(stay.notes)}</em></div>` : ''}
-            <div style="margin-top:0.5rem;">
-              <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stay.name + ' ' + stay.address)}" target="_blank" rel="noopener noreferrer" class="item-link-pill maps" style="font-size:0.7rem; padding:0.18rem 0.45rem;">
-                📍 Open in Google Maps ↗
+            <div class="stay-box-dates">Check-in: <strong>${stay.start_date}</strong> &bull; Check-out: <strong>${stay.end_date}</strong></div>
+            <div class="stay-box-address" style="color:#e2e8f0; font-size:0.8rem; margin:0.25rem 0;">📍 <strong>${escapeHtml(stay.address)}</strong></div>
+            ${stay.notes ? `<div style="font-size:0.75rem; color:#94a3b8; margin-top:0.2rem;"><em>${escapeHtml(stay.notes)}</em></div>` : ''}
+            <div style="margin-top:0.55rem; display:flex; gap:0.4rem; flex-wrap:wrap;">
+              <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(stay.name + ', ' + stay.address)}" target="_blank" rel="noopener noreferrer" class="item-link-pill maps" style="font-size:0.7rem; padding:0.2rem 0.55rem; background:#0284c7; color:#ffffff; font-weight:600;" title="Open directions to hotel in Google Maps with destination pre-populated">
+                🧭 Directions to Hotel ↗
+              </a>
+              <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stay.name + ' ' + stay.address)}" target="_blank" rel="noopener noreferrer" class="item-link-pill neutral" style="font-size:0.7rem; padding:0.2rem 0.55rem;" title="View hotel location pin in Google Maps">
+                📍 View on Map ↗
               </a>
             </div>
           </div>
@@ -986,6 +994,15 @@ function renderCard(item, availableDates) {
     mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.title + ' ' + (item.address || item.city_name || ''))}`;
   }
 
+  let directionsUrl = "";
+  if (transit && (transit.walking_url || transit.transit_url || transit.driving_url)) {
+    directionsUrl = transit.is_walkable ? (transit.walking_url || transit.transit_url) : (transit.transit_url || transit.walking_url);
+  } else if (item.lat && item.lon) {
+    directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lon}`;
+  } else {
+    directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.title + ' ' + (item.address || item.city_name || ''))}`;
+  }
+
   const sourceLabel = item.source_platform ? escapeHtml(item.source_platform) : "Website";
   const isSelected = Boolean(window.isBulkSelectMode && window.selectedBulkItemIds && window.selectedBulkItemIds.has(item.id));
 
@@ -1038,8 +1055,11 @@ function renderCard(item, availableDates) {
             🔍 Web Info ↗
           </a>
         `}
-        <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" class="item-link-pill maps" title="Open location in Google Maps">
-          📍 Maps &amp; Directions ↗
+        <a href="${escapeHtml(directionsUrl)}" target="_blank" rel="noopener noreferrer" class="item-link-pill maps" title="Open directions from hotel with 'To' and 'From' pre-populated in Google Maps">
+          🧭 Directions ↗
+        </a>
+        <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" class="item-link-pill neutral" title="Open venue location pin in Google Maps">
+          📍 Map Pin ↗
         </a>
         ${gcalUrl ? `
           <a href="${escapeHtml(gcalUrl)}" target="_blank" rel="noopener noreferrer" class="item-link-pill calendar" title="Add event to Google Calendar" style="background:rgba(59,130,246,0.12); color:#60a5fa; border:1px solid rgba(59,130,246,0.25);">
@@ -1762,6 +1782,15 @@ function renderExploreCard(item, availableDates) {
     mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.title + ' ' + (item.address || item.city_name || ''))}`;
   }
 
+  let directionsUrl = "";
+  if (transit && (transit.walking_url || transit.transit_url || transit.driving_url)) {
+    directionsUrl = transit.is_walkable ? (transit.walking_url || transit.transit_url) : (transit.transit_url || transit.walking_url);
+  } else if (item.lat && item.lon) {
+    directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lon}`;
+  } else {
+    directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.title + ' ' + (item.address || item.city_name || ''))}`;
+  }
+
   const isFree = Boolean(item.is_free || (item.cost && item.cost.toLowerCase().includes("free")));
   const costBadge = isFree
     ? `<span class="badge badge-curated badge-clickable" data-filter-type="free" title="Click to filter Free Only">🎟️ FREE</span>`
@@ -1883,9 +1912,12 @@ function renderExploreCard(item, availableDates) {
 
       <!-- Card Footer -->
       <div class="card-footer" style="margin-top:1rem; padding-top:0.75rem; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.6rem;">
-        <div style="display:flex; align-items:center; gap:0.75rem;">
-          <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" style="color:#38bdf8; font-size:0.8rem; text-decoration:none; font-weight:500;">
-            📍 Maps
+        <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+          <a href="${escapeHtml(directionsUrl)}" target="_blank" rel="noopener noreferrer" style="color:#38bdf8; font-size:0.8rem; text-decoration:none; font-weight:600;" title="Open directions with 'To' and 'From' populated">
+            🧭 Directions
+          </a>
+          <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" style="color:#94a3b8; font-size:0.8rem; text-decoration:none;" title="Open venue location pin in Google Maps">
+            📍 Map Pin
           </a>
           ${safeDirectUrl ? `
             <a href="${escapeHtml(safeDirectUrl)}" target="_blank" rel="noopener noreferrer" style="color:#a78bfa; font-size:0.8rem; text-decoration:none; font-weight:500;">
@@ -2099,6 +2131,48 @@ function initModals() {
     });
   }
 
+  // Edit Stay Modal
+  const editStayModal = document.getElementById("editStayModal");
+  const closeEditStayBtn = document.getElementById("closeEditStayBtn");
+  const cancelEditStayBtn = document.getElementById("cancelEditStayBtn");
+  const editStayForm = document.getElementById("editStayForm");
+
+  if (closeEditStayBtn) closeEditStayBtn.addEventListener("click", () => editStayModal.style.display = "none");
+  if (cancelEditStayBtn) cancelEditStayBtn.addEventListener("click", () => editStayModal.style.display = "none");
+
+  if (editStayForm) {
+    editStayForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const stayId = document.getElementById("editStayId").value;
+      const payload = {
+        name: document.getElementById("editStayNameInput").value.trim(),
+        address: document.getElementById("editStayAddressInput").value.trim(),
+        start_date: document.getElementById("editStayStartInput").value,
+        end_date: document.getElementById("editStayEndInput").value,
+        notes: document.getElementById("editStayNotesInput").value.trim()
+      };
+
+      try {
+        const res = await fetch(`/api/trips/${currentTripId}/stays/${stayId}`, {
+          method: "PUT",
+          headers: getAuthHeaders({ "Content-Type": "application/json" }),
+          credentials: "include",
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          editStayModal.style.display = "none";
+          editStayForm.reset();
+          await refreshTrip();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          alert("Failed to update hotel details: " + (err.detail || res.statusText));
+        }
+      } catch (err) {
+        alert("Error updating hotel: " + err.message);
+      }
+    });
+  }
+
   // Invite Modal
   const inviteModal = document.getElementById("inviteModal");
   const openInviteBtn = document.getElementById("openInviteBtn");
@@ -2243,6 +2317,7 @@ function initModals() {
       const start_date = document.getElementById("newTripStart").value;
       const end_date = document.getElementById("newTripEnd").value;
       const hotel_name = document.getElementById("newTripHotel").value.trim();
+      const hotel_address = document.getElementById("newTripHotelAddress")?.value.trim() || hotel_name;
 
       try {
         const res = await fetch("/api/trips", {
@@ -2255,7 +2330,7 @@ function initModals() {
             start_date,
             end_date,
             hotel_name,
-            hotel_address: hotel_name
+            hotel_address
           })
         });
         if (res.ok) {
@@ -2562,6 +2637,18 @@ function openAddStayModal(cityId, cityName) {
   modal.querySelector("h3").textContent = `🏨 Add Hotel / Stay in ${cityName}`;
   modal.style.display = "flex";
 }
+
+function openEditStayModal(stayId, name, address, startDate, endDate, notes) {
+  document.getElementById("editStayId").value = stayId;
+  document.getElementById("editStayNameInput").value = name || "";
+  document.getElementById("editStayAddressInput").value = address || "";
+  document.getElementById("editStayStartInput").value = startDate || "";
+  document.getElementById("editStayEndInput").value = endDate || "";
+  document.getElementById("editStayNotesInput").value = notes || "";
+  const modal = document.getElementById("editStayModal");
+  if (modal) modal.style.display = "flex";
+}
+window.openEditStayModal = openEditStayModal;
 
 // Helper to get all cities present across the itinerary and destination segments
 function getTripItineraryCities() {
@@ -3210,9 +3297,12 @@ async function renderMapLocations() {
                 <div style="font-size:0.8rem; color:#475569; margin-top:0.2rem;">📍 ${escapeHtml(s.address)}</div>
                 <div style="font-size:0.75rem; color:#d97706; font-weight:bold; margin-top:0.3rem;">📅 Active: ${s.start_date} &rarr; ${s.end_date}</div>
                 ${s.notes ? `<div style="font-size:0.75rem; color:#64748b; margin-top:0.2rem;">${escapeHtml(s.notes)}</div>` : ''}
-                <div style="margin-top:0.5rem;">
-                  <a href="https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lon}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#0284c7; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600; display:inline-block;">
-                    📍 Google Maps Directions ↗
+                <div style="margin-top:0.5rem; display:flex; gap:0.35rem; flex-wrap:wrap;">
+                  <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(s.name + ', ' + s.address)}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#0284c7; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600; display:inline-block;" title="Open Google Maps directions with hotel pre-populated as destination">
+                    🧭 Directions to Hotel ↗
+                  </a>
+                  <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.name + ' ' + s.address)}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:rgba(0,0,0,0.06); border:1px solid #94a3b8; color:#0f172a; border-radius:4px; text-decoration:none; font-weight:600; display:inline-block;" title="View hotel location in Google Maps">
+                    📍 View on Map ↗
                   </a>
                 </div>
               </div>
@@ -3279,10 +3369,10 @@ async function renderMapLocations() {
               <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#0284c7; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;" title="Open official website">
                 🌐 Web ↗
               </a>
-              <a href="${escapeHtml(it.transit?.transit_url || `https://www.google.com/maps/dir/?api=1&destination=${it.lat},${it.lon}&travelmode=transit`)}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#0ea5e9; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;" title="Live Bus &amp; Transit Directions">
+              <a href="${escapeHtml(it.transit?.transit_url || `https://www.google.com/maps/dir/?api=1${it.transit?.stay_address ? `&origin=${encodeURIComponent(it.transit.stay_address)}` : ''}&destination=${it.lat},${it.lon}&travelmode=transit`)}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#0ea5e9; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;" title="Live Bus &amp; Transit Directions from Hotel">
                 🚌 Transit ↗
               </a>
-              <a href="${escapeHtml(it.transit?.walking_url || `https://www.google.com/maps/dir/?api=1&destination=${it.lat},${it.lon}&travelmode=walking`)}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#10b981; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;" title="Walking Route">
+              <a href="${escapeHtml(it.transit?.walking_url || `https://www.google.com/maps/dir/?api=1${it.transit?.stay_address ? `&origin=${encodeURIComponent(it.transit.stay_address)}` : ''}&destination=${it.lat},${it.lon}&travelmode=walking`)}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#10b981; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;" title="Walking Route from Hotel">
                 🚶 Walk ↗
               </a>
             </div>

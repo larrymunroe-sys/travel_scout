@@ -306,6 +306,13 @@ class AddStayPayload(BaseModel):
     end_date: str
     notes: Optional[str] = None
 
+class UpdateStayPayload(BaseModel):
+    name: Optional[str] = None
+    address: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    notes: Optional[str] = None
+
 class AddItemPayload(BaseModel):
     city_segment_id: Optional[str] = None
     city_name: Optional[str] = None
@@ -1368,6 +1375,44 @@ async def add_stay(trip_id: str, city_id: str, payload: AddStayPayload, request:
         notes=payload.notes
     )
     return {"status": "created", "stay_id": stay.id, "stay_name": stay.name}
+
+@app.put("/api/trips/{trip_id}/stays/{stay_id}")
+async def update_stay(
+    trip_id: str,
+    stay_id: str,
+    payload: UpdateStayPayload,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Update accommodation name, street address, active dates, or notes."""
+    user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=True)
+
+    stay = db.query(StayLocation).join(CitySegment).filter(
+        StayLocation.id == stay_id,
+        CitySegment.trip_id == trip_id
+    ).first()
+    if not stay:
+        raise HTTPException(status_code=404, detail="Stay not found on this itinerary.")
+
+    updated = scout_engine.update_stay(
+        db=db,
+        stay_id=stay_id,
+        name=payload.name,
+        address=payload.address,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
+        notes=payload.notes
+    )
+    return {
+        "status": "updated",
+        "stay_id": updated.id,
+        "name": updated.name,
+        "address": updated.address,
+        "start_date": updated.start_date,
+        "end_date": updated.end_date,
+        "notes": updated.notes
+    }
 
 @app.delete("/api/trips/{trip_id}/stays/{stay_id}")
 async def delete_stay(trip_id: str, stay_id: str, request: Request, db: Session = Depends(get_db)):

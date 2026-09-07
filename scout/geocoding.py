@@ -57,6 +57,7 @@ GLOBAL_CITY_COORDINATES: Dict[str, Dict[str, Any]] = {
     "washington dc": {"lat": 38.9072, "lon": -77.0369, "country": "United States"},
     "washington": {"lat": 38.9072, "lon": -77.0369, "country": "United States"},
     "los angeles": {"lat": 34.0522, "lon": -118.2437, "country": "United States"},
+    "san diego": {"lat": 32.7157, "lon": -117.1611, "country": "United States"},
     "san francisco": {"lat": 37.7749, "lon": -122.4194, "country": "United States"},
     "chicago": {"lat": 41.8781, "lon": -87.6298, "country": "United States"},
     "seattle": {"lat": 47.6062, "lon": -122.3321, "country": "United States"},

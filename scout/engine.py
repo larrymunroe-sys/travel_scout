@@ -388,6 +388,43 @@ class ScoutEngine:
         db.refresh(stay)
         return stay
 
+    def update_stay(
+        self,
+        db: Session,
+        stay_id: str,
+        name: Optional[str] = None,
+        address: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        notes: Optional[str] = None
+    ) -> Optional[StayLocation]:
+        """Update stay location details and dynamically re-geocode coordinates."""
+        stay = db.query(StayLocation).filter(StayLocation.id == stay_id).first()
+        if not stay:
+            return None
+        if name:
+            stay.name = name.strip()
+        if address:
+            stay.address = address.strip()
+            # Attempt geocoding if address or city is available
+            seg = stay.city_segment
+            city_str = seg.city_name if seg else ""
+            res_lat, res_lon, _ = resolve_city_coordinates(f"{stay.name}, {stay.address}", seg.country if seg else None)
+            if res_lat == 0.0:
+                res_lat, res_lon, _ = resolve_city_coordinates(f"{stay.address}, {city_str}", seg.country if seg else None)
+            if res_lat != 0.0 and res_lon != 0.0:
+                stay.lat = res_lat
+                stay.lon = res_lon
+        if start_date:
+            stay.start_date = start_date
+        if end_date:
+            stay.end_date = end_date
+        if notes is not None:
+            stay.notes = notes
+        db.commit()
+        db.refresh(stay)
+        return stay
+
     def delete_stay(self, db: Session, stay_id: str, trip_id: Optional[str] = None) -> bool:
         query = db.query(StayLocation)
         if trip_id:

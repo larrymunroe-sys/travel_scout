@@ -228,6 +228,16 @@ def _resolve_transit_network(
         network_info["fare_tip"] = "OMNY contactless tap-to-pay ($2.90/ride with free 2h transfer; 7-day fare cap)."
         est_transit_mins = max(8, min(25, round(straight_km * 2.2 + 5)))
 
+    # 7. SAN DIEGO
+    elif "san diego" in c_lower:
+        network_info["currency"] = "USD"
+        network_info["transit_mode"] = "MTS Trolley & Rapid Bus"
+        network_info["transit_line"] = "MTS Rapid Bus (Route 215) & MTS Trolley"
+        network_info["bus_routes"] = "MTS Route 215 Rapid (El Cajon Blvd corridor), Route 1, Route 7 (Balboa Park/Downtown), Route 30 (La Jolla)"
+        network_info["transit_details"] = "Take MTS Route 215 Rapid along El Cajon Blvd directly connecting North Park to Balboa Park and Downtown San Diego."
+        network_info["fare_tip"] = "PRONTO contactless card or mobile app ($2.50 one-way, 2h free transfers, $6 daily fare cap)."
+        est_transit_mins = max(8, min(28, round(straight_km * 2.3 + 5)))
+
     # 7. LONDON
     elif "london" in c_lower:
         network_info["currency"] = "GBP"
