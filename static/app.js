@@ -813,6 +813,7 @@ function renderItineraryTab() {
     if (cityFilter !== "all" && dayItems.length === 0) return "";
 
     const dayCity = (dayItems.length > 0 && dayItems[0].city_name && dayItems[0].city_name !== "Universal") ? dayItems[0].city_name : null;
+    const dayStay = day.stay || getLodgingForDate(day.date);
     const weather = (currentTripData.weather && currentTripData.weather[day.date]) ? currentTripData.weather[day.date] : null;
     const cityNow = (dayCity && currentTripData.weather && currentTripData.weather._current) ? currentTripData.weather._current[dayCity] : null;
 
@@ -820,6 +821,12 @@ function renderItineraryTab() {
       <div class="day-block">
         <div class="day-header" style="flex-wrap:wrap; gap:0.5rem; align-items:center;">
           <div class="day-title">📅 Date: <strong>${day.date}</strong> ${dayCity ? `&bull; <span style="color:#38bdf8; font-weight:600;">🏙️ ${escapeHtml(dayCity)}</span>` : ''}</div>
+          ${dayStay ? `
+            <span class="badge" title="Active Lodging: ${escapeHtml(dayStay.name)} (${escapeHtml(dayStay.address || '')})" style="background:rgba(2,132,199,0.18); border:1px solid rgba(56,189,248,0.35); color:#bae6fd; font-size:0.75rem; display:inline-flex; align-items:center; gap:0.35rem; padding:0.2rem 0.55rem; border-radius:999px;">
+              <span>🏨 Base: <strong>${escapeHtml(dayStay.name)}</strong></span>
+              <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dayStay.name + ', ' + (dayStay.address || ''))}" target="_blank" rel="noopener noreferrer" style="color:#38bdf8; text-decoration:none; font-weight:700; margin-left:0.2rem;" title="Directions to lodging in Google Maps">🧭 Hotel ↗</a>
+            </span>
+          ` : ''}
           <span class="badge" style="background:rgba(56,189,248,0.15); color:#38bdf8;">${dayItems.length} Stops</span>
           ${weather ? `
             <span class="badge" title="${escapeHtml(weather.advisory)}" style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); color:var(--text-main); font-size:0.75rem; display:inline-flex; align-items:center; gap:0.35rem; padding:0.2rem 0.55rem; border-radius:999px;">
@@ -953,6 +960,80 @@ function buildCardTransitBox(transit) {
   `;
 }
 
+function getLodgingForDate(targetDate, cityId = null) {
+  if (!currentTripData || !Array.isArray(currentTripData.cities)) return null;
+
+  // 1. If date is a specific calendar date, search all stays across all trip cities
+  if (targetDate && targetDate !== "todo") {
+    for (const city of currentTripData.cities) {
+      if (Array.isArray(city.stays)) {
+        for (const s of city.stays) {
+          if (s.start_date && s.end_date && s.start_date <= targetDate && targetDate <= s.end_date) {
+            return s;
+          }
+        }
+      }
+    }
+    // Check if city date boundaries cover it
+    for (const city of currentTripData.cities) {
+      if (city.start_date && city.end_date && city.start_date <= targetDate && targetDate <= city.end_date) {
+        if (Array.isArray(city.stays) && city.stays.length > 0) {
+          return city.stays[0];
+        }
+      }
+    }
+  }
+
+  // 2. Preferred city match
+  if (cityId) {
+    const matchedCity = currentTripData.cities.find(c => String(c.id) === String(cityId));
+    if (matchedCity && Array.isArray(matchedCity.stays) && matchedCity.stays.length > 0) {
+      return matchedCity.stays[0];
+    }
+  }
+
+  // 3. Fallback to first stay of first city
+  const firstCity = currentTripData.cities[0];
+  if (firstCity && Array.isArray(firstCity.stays) && firstCity.stays.length > 0) {
+    return firstCity.stays[0];
+  }
+
+  return null;
+}
+
+function getDirectionsUrlFromLodging(item, targetDate = null) {
+  const transit = item.transit;
+  if (transit && (transit.walking_url || transit.transit_url || transit.driving_url)) {
+    return transit.is_walkable ? (transit.walking_url || transit.transit_url) : (transit.transit_url || transit.walking_url);
+  }
+
+  const effectiveDate = targetDate || item.assigned_date;
+  const stay = getLodgingForDate(effectiveDate, item.city_id || item.city_segment_id);
+
+  let orig = "";
+  if (stay) {
+    if (stay.lat != null && stay.lon != null && stay.lat !== 0) {
+      orig = `${stay.lat},${stay.lon}`;
+    } else if (stay.address) {
+      const origName = (stay.name && !stay.address.includes(stay.name)) ? `${stay.name}, ` : "";
+      orig = encodeURIComponent(origName + stay.address);
+    } else if (stay.name) {
+      orig = encodeURIComponent(stay.name);
+    }
+  }
+
+  let dest = "";
+  if (item.lat != null && item.lon != null && item.lat !== 0) {
+    dest = `${item.lat},${item.lon}`;
+  } else {
+    dest = encodeURIComponent((item.title || '') + ' ' + (item.address || item.city_name || ''));
+  }
+
+  const base = "https://www.google.com/maps/dir/?api=1";
+  const origParam = orig ? `&origin=${orig}` : '';
+  return `${base}${origParam}&destination=${dest}&travelmode=transit`;
+}
+
 function renderCard(item, availableDates) {
   const author = item.added_by || { name: "Traveler", avatar_color: "#38bdf8" };
   const transit = item.transit || {};
@@ -994,14 +1075,9 @@ function renderCard(item, availableDates) {
     mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.title + ' ' + (item.address || item.city_name || ''))}`;
   }
 
-  let directionsUrl = "";
-  if (transit && (transit.walking_url || transit.transit_url || transit.driving_url)) {
-    directionsUrl = transit.is_walkable ? (transit.walking_url || transit.transit_url) : (transit.transit_url || transit.walking_url);
-  } else if (item.lat && item.lon) {
-    directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lon}`;
-  } else {
-    directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.title + ' ' + (item.address || item.city_name || ''))}`;
-  }
+  const matchedStay = getLodgingForDate(item.assigned_date, item.city_id);
+  const stayName = item.transit?.stay_name || matchedStay?.name || "Hotel";
+  const directionsUrl = getDirectionsUrlFromLodging(item);
 
   const sourceLabel = item.source_platform ? escapeHtml(item.source_platform) : "Website";
   const isSelected = Boolean(window.isBulkSelectMode && window.selectedBulkItemIds && window.selectedBulkItemIds.has(item.id));
@@ -1055,8 +1131,8 @@ function renderCard(item, availableDates) {
             🔍 Web Info ↗
           </a>
         `}
-        <a href="${escapeHtml(directionsUrl)}" target="_blank" rel="noopener noreferrer" class="item-link-pill maps" title="Open directions from hotel with 'To' and 'From' pre-populated in Google Maps">
-          🧭 Directions ↗
+        <a href="${escapeHtml(directionsUrl)}" target="_blank" rel="noopener noreferrer" class="item-link-pill maps" title="Open Google Maps directions from ${escapeHtml(stayName)} to ${escapeHtml(item.title)} with origin and destination pre-populated">
+          🧭 Directions from Hotel ↗
         </a>
         <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" class="item-link-pill neutral" title="Open venue location pin in Google Maps">
           📍 Map Pin ↗
@@ -1782,14 +1858,9 @@ function renderExploreCard(item, availableDates) {
     mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.title + ' ' + (item.address || item.city_name || ''))}`;
   }
 
-  let directionsUrl = "";
-  if (transit && (transit.walking_url || transit.transit_url || transit.driving_url)) {
-    directionsUrl = transit.is_walkable ? (transit.walking_url || transit.transit_url) : (transit.transit_url || transit.walking_url);
-  } else if (item.lat && item.lon) {
-    directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lon}`;
-  } else {
-    directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.title + ' ' + (item.address || item.city_name || ''))}`;
-  }
+  const matchedStay = getLodgingForDate(item.assigned_date, item.city_id || item.city_segment_id);
+  const stayName = item.transit?.stay_name || matchedStay?.name || "Hotel";
+  const directionsUrl = getDirectionsUrlFromLodging(item);
 
   const isFree = Boolean(item.is_free || (item.cost && item.cost.toLowerCase().includes("free")));
   const costBadge = isFree
@@ -1913,8 +1984,8 @@ function renderExploreCard(item, availableDates) {
       <!-- Card Footer -->
       <div class="card-footer" style="margin-top:1rem; padding-top:0.75rem; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.6rem;">
         <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-          <a href="${escapeHtml(directionsUrl)}" target="_blank" rel="noopener noreferrer" style="color:#38bdf8; font-size:0.8rem; text-decoration:none; font-weight:600;" title="Open directions with 'To' and 'From' populated">
-            🧭 Directions
+          <a href="${escapeHtml(directionsUrl)}" target="_blank" rel="noopener noreferrer" style="color:#38bdf8; font-size:0.8rem; text-decoration:none; font-weight:600;" title="Open Google Maps directions from ${escapeHtml(stayName)} to ${escapeHtml(item.title)} with origin and destination pre-populated">
+            🧭 Directions from Hotel ↗
           </a>
           <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" style="color:#94a3b8; font-size:0.8rem; text-decoration:none;" title="Open venue location pin in Google Maps">
             📍 Map Pin
@@ -3334,6 +3405,27 @@ async function renderMapLocations() {
     const sidebarItemsHtml = [];
     const routeCoords = [];
 
+    // Prepend active lodging for this specific day as starting origin
+    const isSingleDay = Boolean(dayFilter && dayFilter !== "all" && dayFilter !== "todo");
+    const activeDayStay = isSingleDay ? getLodgingForDate(dayFilter) : null;
+    if (activeDayStay && activeDayStay.lat && activeDayStay.lon) {
+      routeCoords.push([activeDayStay.lat, activeDayStay.lon]);
+      sidebarItemsHtml.push(`
+        <div style="background:rgba(2,132,199,0.12); border:1px solid rgba(56,189,248,0.4); border-radius:6px; padding:0.6rem; margin-bottom:0.5rem; cursor:pointer;" onclick="zoomToCoord(${activeDayStay.lat}, ${activeDayStay.lon})">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-weight:700; font-size:0.85rem; color:#38bdf8; display:flex; align-items:center; gap:0.4rem;">
+              <span>🏨</span>
+              <span>START: ${escapeHtml(activeDayStay.name)}</span>
+            </div>
+            <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(activeDayStay.name + ', ' + (activeDayStay.address || ''))}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="color:#38bdf8; font-size:0.75rem; text-decoration:none; padding:0.1rem 0.3rem;" title="Directions to lodging">↗</a>
+          </div>
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">
+            ${escapeHtml(activeDayStay.address || 'Lodging Base')} &bull; 📍 Day Starting Origin
+          </div>
+        </div>
+      `);
+    }
+
     validItems.forEach((it, idx) => {
       const stopNumber = idx + 1;
       routeCoords.push([it.lat, it.lon]);
@@ -3346,6 +3438,10 @@ async function renderMapLocations() {
       });
 
       const targetUrl = it.url || `https://www.google.com/search?q=${encodeURIComponent(it.title + ' ' + it.city_name)}`;
+      const itemStay = isSingleDay ? activeDayStay : (getLodgingForDate(it.assigned_date, it.city_id));
+      const stayLabel = itemStay?.name || "Hotel";
+      const directTransitUrl = it.transit?.transit_url || getDirectionsUrlFromLodging(it, isSingleDay ? dayFilter : it.assigned_date);
+      const directWalkUrl = it.transit?.walking_url || getDirectionsUrlFromLodging(it, isSingleDay ? dayFilter : it.assigned_date);
 
       L.marker([it.lat, it.lon], { icon: itemIcon })
         .addTo(mapMarkersGroup)
@@ -3369,11 +3465,11 @@ async function renderMapLocations() {
               <a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#0284c7; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;" title="Open official website">
                 🌐 Web ↗
               </a>
-              <a href="${escapeHtml(it.transit?.transit_url || `https://www.google.com/maps/dir/?api=1${it.transit?.stay_address ? `&origin=${encodeURIComponent(it.transit.stay_address)}` : ''}&destination=${it.lat},${it.lon}&travelmode=transit`)}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#0ea5e9; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;" title="Live Bus &amp; Transit Directions from Hotel">
-                🚌 Transit ↗
+              <a href="${escapeHtml(directTransitUrl)}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#0ea5e9; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;" title="Live Bus &amp; Transit Directions from ${escapeHtml(stayLabel)}">
+                🚌 Transit from Hotel ↗
               </a>
-              <a href="${escapeHtml(it.transit?.walking_url || `https://www.google.com/maps/dir/?api=1${it.transit?.stay_address ? `&origin=${encodeURIComponent(it.transit.stay_address)}` : ''}&destination=${it.lat},${it.lon}&travelmode=walking`)}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#10b981; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;" title="Walking Route from Hotel">
-                🚶 Walk ↗
+              <a href="${escapeHtml(directWalkUrl)}" target="_blank" rel="noopener noreferrer" style="font-size:0.72rem; padding:0.25rem 0.5rem; background:#10b981; color:#ffffff; border-radius:4px; text-decoration:none; font-weight:600;" title="Walking Route from ${escapeHtml(stayLabel)}">
+                🚶 Walk from Hotel ↗
               </a>
             </div>
           </div>

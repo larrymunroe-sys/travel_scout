@@ -14,16 +14,16 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
-def resolve_stay_for_date(stays: List[Any], target_date: Optional[str]) -> Optional[Any]:
+def resolve_stay_for_date(stays: List[Any], target_date: Optional[str], allow_fallback: bool = True) -> Optional[Any]:
     """
-    Select the active accommodation / hotel for a specific date.
+    Select the active accommodation / hotel for a specific date from a list of stays.
     Enables switching hotels midway through a city stay!
     """
     if not stays:
         return None
 
     if not target_date or target_date == "todo":
-        return stays[0]
+        return stays[0] if allow_fallback else None
 
     # Look for exact date range match
     for s in stays:
@@ -31,8 +31,50 @@ def resolve_stay_for_date(stays: List[Any], target_date: Optional[str]) -> Optio
             if s.start_date <= target_date <= s.end_date:
                 return s
 
-    # Fallback to first stay
-    return stays[0]
+    # Fallback to first stay only if allowed
+    return stays[0] if allow_fallback else None
+
+
+def resolve_stay_for_trip_date(
+    city_segments: List[Any],
+    target_date: Optional[str],
+    preferred_city_id: Optional[str] = None
+) -> tuple[Optional[Any], Optional[Any]]:
+    """
+    Resolve the active lodging / accommodation for a target date across all city segments.
+    By default, the starting destination/origin is from the lodging for that date to the destination.
+    Returns: (active_stay, active_city_segment)
+    """
+    if not city_segments:
+        return None, None
+
+    # 1. If assigned to a specific calendar date, find the stay whose date range covers it
+    if target_date and target_date != "todo":
+        # First priority: exact stay date match
+        for seg in city_segments:
+            for s in (seg.stays or []):
+                if s.start_date and s.end_date and s.start_date <= target_date <= s.end_date:
+                    return s, seg
+
+        # Second priority: city segment date match
+        for seg in city_segments:
+            if seg.start_date and seg.end_date and seg.start_date <= target_date <= seg.end_date:
+                if seg.stays:
+                    return seg.stays[0], seg
+                return None, seg
+
+    # 2. If date is 'todo' or outside known ranges, use preferred city if specified
+    if preferred_city_id:
+        for seg in city_segments:
+            if str(seg.id) == str(preferred_city_id):
+                if seg.stays:
+                    return resolve_stay_for_date(seg.stays, target_date, allow_fallback=True), seg
+                return None, seg
+
+    # 3. Default fallback: First city segment and its first stay
+    first_seg = city_segments[0]
+    first_stay = first_seg.stays[0] if (first_seg and first_seg.stays) else None
+    return first_stay, first_seg
 
 
 def _build_directions_urls(
@@ -43,17 +85,31 @@ def _build_directions_urls(
     venue_title: str = "",
     venue_address: str = ""
 ) -> Dict[str, str]:
-    """Build actionable Google Maps transit, walking, and driving directions URLs."""
-    if stay and stay.lat is not None and stay.lon is not None and venue_lat is not None and venue_lon is not None:
-        orig = f"{stay.lat},{stay.lon}"
+    """
+    Build actionable Google Maps transit, walking, and driving directions URLs.
+    The origin (starting point) is pre-populated by default from the lodging for that date.
+    """
+    base = "https://www.google.com/maps/dir/?api=1"
+
+    # 1. Starting Origin: Default from lodging for that date
+    if stay:
+        if stay.lat is not None and stay.lon is not None and stay.lat != 0.0:
+            orig = f"{stay.lat},{stay.lon}"
+        elif stay.address:
+            orig_name = f"{stay.name}, " if stay.name and stay.name not in stay.address else ""
+            orig = urllib.parse.quote(f"{orig_name}{stay.address}")
+        else:
+            orig = urllib.parse.quote(f"{stay.name or 'Hotel'}, {city_name}".strip())
+    else:
+        orig = urllib.parse.quote(city_name or "Hotel")
+
+    # 2. Destination:
+    if venue_lat is not None and venue_lon is not None and venue_lat != 0.0:
         dest = f"{venue_lat},{venue_lon}"
     else:
-        orig_str = f"{stay.address or stay.name}, {city_name}" if stay else (city_name or "Hotel")
         dest_str = f"{venue_title or ''} {venue_address or ''}, {city_name}".strip()
-        orig = urllib.parse.quote(orig_str)
         dest = urllib.parse.quote(dest_str or "Destination")
 
-    base = "https://www.google.com/maps/dir/?api=1"
     return {
         "transit_url": f"{base}&origin={orig}&destination={dest}&travelmode=transit",
         "walking_url": f"{base}&origin={orig}&destination={dest}&travelmode=walking",

@@ -23,7 +23,7 @@ from database.models import User, Trip, TripCollaborator, CitySegment, StayLocat
 from scout.config import BASE_DIR, CITY_PRESETS, CATEGORIES, SEARCH_CHANNELS
 from scout.engine import ScoutEngine
 from scout.web_search import live_city_search
-from scout.transit import resolve_stay_for_date, calculate_transit_from_stay
+from scout.transit import resolve_stay_for_date, resolve_stay_for_trip_date, calculate_transit_from_stay
 from scout.local_agent import run_local_agent_for_city_segment, discover_city_publications, EVENT_SCAN_QUERIES
 from scout.weather import get_trip_weather
 from scout.calendar_sync import generate_trip_ics, generate_google_calendar_url
@@ -1003,20 +1003,14 @@ async def get_trip_details(trip_id: str, request: Request, db: Session = Depends
             "avatar_color": u.avatar_color
         }
 
-        # Resolve active hotel for this item's assigned date
-        active_stay = None
-        effective_seg = seg
-        if not effective_seg and trip.city_segments:
-            addr_check = f"{item.address or ''} {item.neighborhood or ''} {item.title}".lower()
-            for cs in trip.city_segments:
-                if cs.city_name.lower() in addr_check:
-                    effective_seg = cs
-                    break
-            if not effective_seg:
-                effective_seg = trip.city_segments[0]
-
-        if effective_seg and effective_seg.stays:
-            active_stay = resolve_stay_for_date(effective_seg.stays, item.assigned_date)
+        # Resolve active hotel for this item's assigned date (default starting destination is from lodging for that date)
+        active_stay, effective_seg = resolve_stay_for_trip_date(
+            city_segments=trip.city_segments,
+            target_date=item.assigned_date,
+            preferred_city_id=item.city_segment_id or (seg.id if seg else None)
+        )
+        if not effective_seg and seg:
+            effective_seg = seg
 
         transit_info = calculate_transit_from_stay(
             stay=active_stay,
@@ -1093,10 +1087,25 @@ async def get_trip_details(trip_id: str, request: Request, db: Session = Depends
                 days_map[item.assigned_date] = []
             days_map[item.assigned_date].append(item_dict)
 
-    days_list = [
-        {"date": d, "items": days_map[d]}
-        for d in sorted(days_map.keys())
-    ]
+    days_list = []
+    for d in sorted(days_map.keys()):
+        day_stay, day_seg = resolve_stay_for_trip_date(trip.city_segments, d)
+        days_list.append({
+            "date": d,
+            "city": day_seg.city_name if day_seg else None,
+            "city_id": day_seg.id if day_seg else None,
+            "stay": {
+                "id": day_stay.id,
+                "name": day_stay.name,
+                "address": day_stay.address,
+                "lat": day_stay.lat,
+                "lon": day_stay.lon,
+                "start_date": day_stay.start_date,
+                "end_date": day_stay.end_date,
+                "notes": day_stay.notes
+            } if day_stay else None,
+            "items": days_map[d]
+        })
 
     # Weather forecast across trip cities
     weather_lookup = get_trip_weather(trip.city_segments)
@@ -1184,19 +1193,14 @@ async def print_itinerary_view(
             "avatar_color": u.avatar_color
         }
 
-        active_stay = None
-        effective_seg = seg
-        if not effective_seg and trip.city_segments:
-            addr_check = f"{item.address or ''} {item.neighborhood or ''} {item.title}".lower()
-            for cs in trip.city_segments:
-                if cs.city_name.lower() in addr_check:
-                    effective_seg = cs
-                    break
-            if not effective_seg:
-                effective_seg = trip.city_segments[0]
-
-        if effective_seg and effective_seg.stays:
-            active_stay = resolve_stay_for_date(effective_seg.stays, item.assigned_date)
+        # Resolve active hotel for this item's assigned date (default starting origin is from lodging for that date)
+        active_stay, effective_seg = resolve_stay_for_trip_date(
+            city_segments=trip.city_segments,
+            target_date=item.assigned_date,
+            preferred_city_id=item.city_segment_id or (seg.id if seg else None)
+        )
+        if not effective_seg and seg:
+            effective_seg = seg
 
         transit_info = calculate_transit_from_stay(
             stay=active_stay,
@@ -1247,15 +1251,10 @@ async def print_itinerary_view(
         elif not item.assigned_date or item.assigned_date == "todo":
             todo_items.append(item_dict)
 
-    # Attach active stays to days
+    # Attach active stays to days (resolved by date)
     days_list = []
     for d in target_dates:
-        day_stay = None
-        for seg in trip.city_segments:
-            s = resolve_stay_for_date(seg.stays, d)
-            if s:
-                day_stay = s
-                break
+        day_stay, _ = resolve_stay_for_trip_date(trip.city_segments, d)
         days_list.append({
             "date": d,
             "active_stay": day_stay,
