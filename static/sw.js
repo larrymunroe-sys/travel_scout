@@ -1,7 +1,6 @@
 // Travel Scout Progressive Web App Service Worker (Offline Cache)
-const CACHE_NAME = "travel-scout-v2.8";
+const CACHE_NAME = "travel-scout-v3.0";
 const PRECACHE_URLS = [
-  "/",
   "/static/styles.css",
   "/static/app.js",
   "/static/manifest.json",
@@ -30,6 +29,15 @@ self.addEventListener("activate", (event) => {
           }
         })
       );
+    }).then(() => {
+      // Evict any dynamic or auth responses that may have been cached previously
+      return caches.open(CACHE_NAME).then((cache) => {
+        return Promise.all([
+          cache.delete("/"),
+          cache.delete("/index.html"),
+          cache.delete("/auth/me")
+        ]);
+      });
     }).then(() => self.clients.claim())
   );
 });
@@ -37,12 +45,25 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
-  // Skip non-GET requests
+  // 1. Skip non-GET requests
   if (event.request.method !== "GET") {
     return;
   }
 
-  // Network-first for dynamic API routes, with offline cache fallback
+  // 2. NEVER intercept or cache auth routes (always direct live network)
+  if (url.pathname.startsWith("/auth/")) {
+    return;
+  }
+
+  // 3. Navigation requests (HTML pages): ALWAYS live from network, never cache dynamic HTML
+  if (event.request.mode === "navigate" || url.pathname === "/" || url.pathname === "/index.html") {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match("/offline.html"))
+    );
+    return;
+  }
+
+  // 4. API routes: Network-first, with offline cache fallback
   if (url.pathname.startsWith("/api/")) {
     event.respondWith(
       fetch(event.request)
@@ -60,27 +81,10 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Network-first for HTML navigation requests so users always receive latest app version
-  if (event.request.mode === "navigate" || url.pathname === "/" || url.pathname === "/index.html") {
-    event.respondWith(
-      fetch(event.request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const clone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          }
-          return networkResponse;
-        })
-        .catch(() => caches.match(event.request))
-    );
-    return;
-  }
-
-  // Cache-first for static assets
+  // 5. Static assets only (CSS, JS, images, fonts): Cache-first with background revalidation
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
-        // Fetch in background to revalidate cache
         fetch(event.request).then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));

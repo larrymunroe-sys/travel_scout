@@ -396,7 +396,7 @@ async def serve_index(request: Request, db: Session = Depends(get_db)):
     trip = accessible_trips[0] if accessible_trips else None
     all_users = db.query(User).all()
 
-    return templates.TemplateResponse(
+    response = templates.TemplateResponse(
         request=request,
         name="index.html",
         context={
@@ -409,6 +409,10 @@ async def serve_index(request: Request, db: Session = Depends(get_db)):
             "event_scan_queries": EVENT_SCAN_QUERIES,
         }
     )
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 # ==================== GOOGLE OAUTH 2.0 CONFIG & ROUTES ====================
@@ -576,6 +580,8 @@ async def dev_login(payload: DevLoginPayload, request: Request, response: Respon
         db.refresh(user)
 
     session_token = set_session_cookie(response, user.id, request)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
     return {
         "status": "success",
         "session_token": session_token,
@@ -589,9 +595,12 @@ async def dev_login(payload: DevLoginPayload, request: Request, response: Respon
     }
 
 @app.get("/auth/me")
-async def get_me(request: Request, db: Session = Depends(get_db)):
+async def get_me(request: Request, response: Response, db: Session = Depends(get_db)):
     user = get_optional_current_user(request, db)
     all_users = db.query(User).all()
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     return {
         "current_user": {
             "id": user.id,
@@ -609,8 +618,11 @@ async def get_me(request: Request, db: Session = Depends(get_db)):
 @app.post("/auth/logout")
 async def logout(request: Request, response: Response):
     is_https = request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https"
-    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/", secure=is_https, samesite="lax")
+    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/", httponly=True, secure=is_https, samesite="lax")
+    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/", httponly=False, secure=False, samesite="lax")
     response.delete_cookie(key="travel_scout_user_id", path="/")
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
     return {"status": "logged_out"}
 
 # ==================== USER MANAGEMENT API ROUTES ====================

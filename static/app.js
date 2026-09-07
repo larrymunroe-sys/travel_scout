@@ -169,9 +169,7 @@ async function loadCurrentUser() {
     // Logoff button handler
     if (logoffBtn) {
       logoffBtn.onclick = async () => {
-        if (confirm(`Log off from ${currentUser ? currentUser.email : 'Travel Scout'}?`)) {
-          await logoff();
-        }
+        await logoff();
       };
     }
 
@@ -256,9 +254,7 @@ async function loadCurrentUser() {
         } else if (val === "manage") {
           openManageUsersModal();
         } else if (val === "logout") {
-          if (confirm(`Log off from ${currentUser ? currentUser.email : 'Travel Scout'}?`)) {
-            await logoff();
-          }
+          await logoff();
         }
         switcher.selectedIndex = 0;
       };
@@ -428,7 +424,7 @@ async function purgeDemoAccounts() {
   }
 }
 
-async function loginAs(email, name) {
+window.loginAs = async function(email, name) {
   try {
     const res = await fetch("/auth/dev-login", {
       method: "POST",
@@ -437,7 +433,7 @@ async function loginAs(email, name) {
       body: JSON.stringify({ email, name })
     });
     if (!res.ok) {
-      const err = await res.json();
+      const err = await res.json().catch(() => ({}));
       alert("Login failed: " + (err.detail || JSON.stringify(err)));
       return;
     }
@@ -448,25 +444,43 @@ async function loginAs(email, name) {
     if (data.user && data.user.id) {
       localStorage.setItem("travel_scout_user_id", data.user.id);
     }
-    window.location.reload();
+    // Evict any cached HTML from CacheStorage to prevent showing guest view
+    if ('caches' in window) {
+      try {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      } catch (e) {}
+    }
+    window.location.href = "/";
   } catch (err) {
     alert("Login failed: " + err.message);
   }
-}
+};
 
-async function logoff() {
+window.logoff = async function() {
   try {
     localStorage.removeItem("travel_scout_session");
     localStorage.removeItem("travel_scout_user_id");
+    // Evict any cached HTML from CacheStorage to prevent showing logged in view
+    if ('caches' in window) {
+      try {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      } catch (e) {}
+    }
     await fetch("/auth/logout", { method: "POST", credentials: "include" });
-    window.location.reload();
+    window.location.href = "/";
   } catch (err) {
     console.error("Logout error:", err);
     localStorage.removeItem("travel_scout_session");
     localStorage.removeItem("travel_scout_user_id");
-    window.location.reload();
+    window.location.href = "/";
   }
-}
+};
+
+// Aliases for backward compatibility
+const loginAs = window.loginAs;
+const logoff = window.logoff;
 
 // 3. Load Trip Details & Switcher
 async function loadTripsDropdown() {

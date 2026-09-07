@@ -88,7 +88,7 @@
             <option value="logout">🚪 Log Off</option>
             {% endif %}
           </select>
-          <button id="logoffBtn" class="btn-logoff" title="Log off active account" style="{% if not current_user %}display:none;{% endif %}">
+          <button id="logoffBtn" type="button" class="btn-logoff" title="Log off active account" style="{% if not current_user %}display:none;{% endif %}" onclick="window.logoff()">
             🚪 Log Off
           </button>
           <button id="headerSignInBtn" type="button" class="btn btn-primary btn-sm" title="Sign in with your Gmail account" style="padding:0.25rem 0.65rem; font-size:0.75rem; {% if current_user %}display:none;{% endif %}" onclick="window.openLogin()">
@@ -1263,7 +1263,7 @@
   </footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/app.js?v=2.8"></script>
+  <script src="/static/app.js?v=3.0"></script>
 </body>
 </html>
 
