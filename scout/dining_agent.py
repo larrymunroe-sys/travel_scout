@@ -11,6 +11,7 @@ from database.models import CitySegment, ItineraryItem
 from scout.web_search import live_city_search
 from scout.geocoding import resolve_venue_coordinates
 from scout.transit import generate_directions_url
+from scout.backup import compute_item_hash, is_item_deleted_and_unchanged, auto_backup_on_change
 
 DINING_SCAN_QUERIES: Dict[str, Dict[str, Any]] = {
     "coffee": {
@@ -169,21 +170,40 @@ def curate_and_ingest_dining(
         ).first()
 
         if not exists:
+            cand_desc = ev.get("description")
+            cand_hl = ev.get("highlight") or f"Recommended {ev.get('dining_type', 'dining')} spot in {ev.get('neighborhood', 'the city')}."
+            cand_cost = ev.get("cost", "$$")
+            cand_time = ev.get("time_info", "Check restaurant hours")
+            cand_addr = ev.get("address", "")
+            cand_url = ev.get("url")
+
+            cand_hash = compute_item_hash(
+                title=ev_title,
+                description=cand_desc,
+                highlight=cand_hl,
+                address=cand_addr,
+                cost=cand_cost,
+                time_info=cand_time,
+                url=cand_url
+            )
+            if is_item_deleted_and_unchanged(db, trip_id, ev_title, cand_hash):
+                continue
+
             item = ItineraryItem(
                 trip_id=trip_id,
                 city_segment_id=city_segment_id,
                 title=ev_title,
                 category=ev.get("category", "dining"),
                 neighborhood=ev.get("neighborhood", "Dining District"),
-                address=ev.get("address", ""),
+                address=cand_addr,
                 lat=ev.get("lat"),
                 lon=ev.get("lon"),
-                cost=ev.get("cost", "$$"),
+                cost=cand_cost,
                 is_free=False,
-                time_info=ev.get("time_info", "Check restaurant hours"),
-                highlight=ev.get("highlight") or f"Recommended {ev.get('dining_type', 'dining')} spot in {ev.get('neighborhood', 'the city')}.",
-                description=ev.get("description"),
-                url=ev.get("url"),
+                time_info=cand_time,
+                highlight=cand_hl,
+                description=cand_desc,
+                url=cand_url,
                 source_platform=ev.get("source_platform", "Dining Scout"),
                 assigned_date="todo",
                 added_by_user_id=user_id
@@ -193,6 +213,7 @@ def curate_and_ingest_dining(
 
     if new_items:
         db.commit()
+        auto_backup_on_change(db)
     return new_items
 
 

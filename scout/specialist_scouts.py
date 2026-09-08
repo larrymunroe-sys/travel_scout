@@ -16,6 +16,7 @@ from database.models import CitySegment, ItineraryItem
 from scout.web_search import live_city_search
 from scout.geocoding import resolve_venue_coordinates
 from scout.transit import generate_directions_url
+from scout.backup import compute_item_hash, is_item_deleted_and_unchanged, auto_backup_on_change
 
 SPECIALIST_AGENTS_CONFIG: Dict[str, Dict[str, Any]] = {
     "vintage-gear": {
@@ -221,21 +222,40 @@ def curate_and_ingest_specialist(
         ).first()
 
         if not exists:
+            v_desc = v.get("description") or f"Curated by {cfg.get('name', 'Specialist Agent')}."
+            v_hl = v.get("highlight") or cfg.get("description_template", "Curated local venue.")
+            v_cost = v.get("cost") or cfg.get("default_cost", "$$")
+            v_time = v.get("time_info", "Check shop hours")
+            v_addr = v.get("address", "")
+            v_url = v.get("url")
+
+            cand_hash = compute_item_hash(
+                title=v_title,
+                description=v_desc,
+                highlight=v_hl,
+                address=v_addr,
+                cost=v_cost,
+                time_info=v_time,
+                url=v_url
+            )
+            if is_item_deleted_and_unchanged(db, trip_id, v_title, cand_hash):
+                continue
+
             item = ItineraryItem(
                 trip_id=trip_id,
                 city_segment_id=city_segment_id,
                 title=v_title,
                 category=cfg.get("category", "gems"),
                 neighborhood=v.get("neighborhood", "Cultural District"),
-                address=v.get("address", ""),
+                address=v_addr,
                 lat=v.get("lat"),
                 lon=v.get("lon"),
-                cost=v.get("cost") or cfg.get("default_cost", "$$"),
-                is_free=cfg.get("category") == "records" or "free" in (v.get("cost") or cfg.get("default_cost", "")).lower(),
-                time_info=v.get("time_info", "Check shop hours"),
-                highlight=v.get("highlight") or cfg.get("description_template", "Curated local venue."),
-                description=v.get("description") or f"Curated by {cfg.get('name', 'Specialist Agent')}.",
-                url=v.get("url"),
+                cost=v_cost,
+                is_free=cfg.get("category") == "records" or "free" in v_cost.lower(),
+                time_info=v_time,
+                highlight=v_hl,
+                description=v_desc,
+                url=v_url,
                 source_platform=cfg.get("tag", "Specialist Scout"),
                 assigned_date="todo",
                 added_by_user_id=user_id
@@ -245,6 +265,7 @@ def curate_and_ingest_specialist(
 
     if new_items:
         db.commit()
+        auto_backup_on_change(db)
     return new_items
 
 

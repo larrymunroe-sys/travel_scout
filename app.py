@@ -19,7 +19,7 @@ from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 
 from database.connection import init_db, get_db, SessionLocal
-from database.models import User, Trip, TripCollaborator, CitySegment, StayLocation, ItineraryItem, TripExpense
+from database.models import User, Trip, TripCollaborator, CitySegment, StayLocation, ItineraryItem, TripExpense, DeletedItem
 from scout.config import BASE_DIR, CITY_PRESETS, CATEGORIES, SEARCH_CHANNELS
 from scout.engine import ScoutEngine
 from scout.web_search import live_city_search
@@ -34,6 +34,11 @@ from scout.concierge_agent import evaluate_reservation_plan
 from scout.specialist_scouts import run_specialist_scout, SPECIALIST_AGENTS_CONFIG
 from scout.weather import get_trip_weather
 from scout.calendar_sync import generate_trip_ics, generate_google_calendar_url
+from scout.backup import (
+    restore_itineraries, auto_backup_on_change, record_deleted_item, record_deleted_items,
+    unmark_deleted_item, is_item_deleted_and_unchanged, compute_item_hash, backup_itineraries,
+    DEFAULT_BACKUP_FILE, HISTORY_DIR
+)
 
 
 
@@ -82,10 +87,17 @@ async def get_pwa_service_worker():
         return FileResponse(str(sw_path), media_type="application/javascript")
     return PlainTextResponse(status_code=404, content="Service Worker not found")
 
-# Ensure database tables and seeds exist on import
+# Ensure database tables, seeds, and backups exist on import
 init_db()
 with SessionLocal() as _db:
     scout_engine.seed_initial_data_if_empty(_db)
+    try:
+        restore_res = restore_itineraries(_db, sync_mode=True)
+        if restore_res.get("restored_trips") or restore_res.get("restored_items"):
+            print(f"[Startup Backup/Restore] Restored {restore_res.get('restored_trips', 0)} trips, {restore_res.get('restored_items', 0)} items (skipped {restore_res.get('skipped_deleted_items', 0)} deleted items)")
+        auto_backup_on_change(_db)
+    except Exception as _b_err:
+        print("[Startup Backup/Restore] Notice:", _b_err)
 
 # ==================== CRYPTOGRAPHIC SESSION MANAGEMENT ====================
 
@@ -839,6 +851,7 @@ async def create_trip(payload: CreateTripPayload, request: Request, db: Session 
             hotel_address=effective_address
         )
 
+    auto_backup_on_change(db)
     return {"status": "created", "trip_id": trip.id, "title": trip.title}
 
 @app.put("/api/trips/{trip_id}")
@@ -853,6 +866,7 @@ async def update_trip(trip_id: str, payload: UpdateTripPayload, request: Request
         trip.description = payload.description
 
     db.commit()
+    auto_backup_on_change(db)
     return {"status": "updated", "trip_id": trip.id, "title": trip.title}
 
 @app.delete("/api/trips/{trip_id}")
@@ -867,6 +881,7 @@ async def delete_trip(trip_id: str, request: Request, db: Session = Depends(get_
     # SQLAlchemy cascade="all, delete-orphan" cleans up city_segments, stays, items, and collaborators
     db.delete(trip)
     db.commit()
+    auto_backup_on_change(db)
 
     # Find remaining accessible trips for this user (do not auto-create if user deleted all trips)
     remaining = get_user_accessible_trips(user, db, auto_create=False)
@@ -975,13 +990,25 @@ async def get_trip_details(trip_id: str, request: Request, db: Session = Depends
     sorted_dates = sorted(list(all_dates))
 
     # 3. Format Itinerary (Days & To-Do)
-    # If trip has city segments but no items yet, backfill curated discoveries
+    # If trip has city segments but no items yet, backfill curated discoveries (skipping deleted items)
     if not trip.items and trip.city_segments:
         from scout.preseeded_data import PRESEEDED_ITEMS
         backfilled = False
         for seg in trip.city_segments:
             preseeded = PRESEEDED_ITEMS.get(seg.city_name, [])
             for idx, item_data in enumerate(preseeded):
+                cand_hash = compute_item_hash(
+                    title=item_data["title"],
+                    description=item_data.get("description"),
+                    highlight=item_data.get("highlight"),
+                    address=item_data.get("address"),
+                    cost=item_data.get("cost"),
+                    time_info=item_data.get("time_info"),
+                    url=item_data.get("url")
+                )
+                if is_item_deleted_and_unchanged(db, trip.id, item_data["title"], cand_hash):
+                    continue
+
                 assigned_date = sorted_dates[idx % len(sorted_dates)] if (sorted_dates and idx < len(sorted_dates)) else "todo"
                 it = ItineraryItem(
                     trip_id=trip.id,
@@ -1007,6 +1034,7 @@ async def get_trip_details(trip_id: str, request: Request, db: Session = Depends
         if backfilled:
             db.commit()
             db.refresh(trip)
+            auto_backup_on_change(db)
 
     all_items = []
     todo_items = []
@@ -1392,6 +1420,7 @@ async def add_stay(trip_id: str, city_id: str, payload: AddStayPayload, request:
         end_date=payload.end_date,
         notes=payload.notes
     )
+    auto_backup_on_change(db)
     return {"status": "created", "stay_id": stay.id, "stay_name": stay.name}
 
 @app.put("/api/trips/{trip_id}/stays/{stay_id}")
@@ -1422,6 +1451,7 @@ async def update_stay(
         end_date=payload.end_date,
         notes=payload.notes
     )
+    auto_backup_on_change(db)
     return {
         "status": "updated",
         "stay_id": updated.id,
@@ -1447,6 +1477,7 @@ async def delete_stay(trip_id: str, stay_id: str, request: Request, db: Session 
 
     db.delete(stay)
     db.commit()
+    auto_backup_on_change(db)
     return {"status": "deleted", "stay_id": stay_id}
 
 # ==================== ITINERARY ITEM CRUD ====================
@@ -1526,8 +1557,10 @@ async def add_itinerary_item(
         added_by_user_id=user.id
     )
     db.add(item)
+    unmark_deleted_item(db, trip_id, item.title)
     db.commit()
     db.refresh(item)
+    auto_backup_on_change(db)
     return {"status": "created", "item_id": item.id}
 
 @app.put("/api/trips/{trip_id}/items/{item_id}")
@@ -1554,6 +1587,7 @@ async def update_itinerary_item(
         item.url = payload.url
 
     db.commit()
+    auto_backup_on_change(db)
     return {"status": "updated", "item_id": item.id, "assigned_date": item.assigned_date}
 
 @app.put("/api/trips/{trip_id}/items/{item_id}/note")
@@ -1583,6 +1617,7 @@ async def update_item_note(
 
     db.commit()
     db.refresh(item)
+    auto_backup_on_change(db)
 
     note_author = None
     if item.note_by:
@@ -1620,6 +1655,7 @@ async def update_item_booking(
     item.booking_ref = (payload.booking_ref or "").strip() or None
     db.commit()
     db.refresh(item)
+    auto_backup_on_change(db)
     return {
         "status": "updated",
         "item_id": item.id,
@@ -1641,12 +1677,21 @@ async def bulk_delete_itinerary_items(
     if not payload.item_ids:
         return {"status": "noop", "deleted_count": 0, "item_ids": []}
 
+    # Record deletions in tombstone registry before removing
+    items_to_delete = db.query(ItineraryItem).filter(
+        ItineraryItem.trip_id == trip_id,
+        ItineraryItem.id.in_(payload.item_ids)
+    ).all()
+    if items_to_delete:
+        record_deleted_items(db, trip_id, items_to_delete)
+
     deleted_count = db.query(ItineraryItem).filter(
         ItineraryItem.trip_id == trip_id,
         ItineraryItem.id.in_(payload.item_ids)
     ).delete(synchronize_session=False)
 
     db.commit()
+    auto_backup_on_change(db)
     return {
         "status": "deleted",
         "deleted_count": deleted_count,
@@ -1671,8 +1716,10 @@ async def delete_itinerary_item(trip_id: str, item_id: str, request: Request, db
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
+    record_deleted_item(db, trip_id, item)
     db.delete(item)
     db.commit()
+    auto_backup_on_change(db)
     return {"status": "deleted", "item_id": item_id}
 
 # ==================== COLLABORATION & SHARING ====================
@@ -2124,6 +2171,7 @@ async def create_trip_expense(
     db.add(expense)
     db.commit()
     db.refresh(expense)
+    auto_backup_on_change(db)
     return {"status": "success", "id": expense.id}
 
 @app.delete("/api/trips/{trip_id}/expenses/{expense_id}")
@@ -2141,6 +2189,7 @@ async def delete_trip_expense(
         raise HTTPException(status_code=404, detail="Expense not found")
     db.delete(exp)
     db.commit()
+    auto_backup_on_change(db)
     return {"status": "success"}
 
 
@@ -2396,6 +2445,48 @@ async def run_trip_bookstores(trip_id: str, payload: SpecialistScoutPayload, req
     """Run Independent & Vintage Bookstores Scout Agent."""
     payload.agent_type = "bookstores"
     return await run_trip_specialist_agent(trip_id, payload, request, db)
+
+
+# ==================== BACKUP & DELETION RECOVERY API ====================
+
+@app.get("/api/backup/status")
+async def get_backup_status(request: Request, db: Session = Depends(get_db)):
+    """Retrieve itinerary backup health, file size, and historical snapshots count."""
+    user = get_optional_current_user(request, db)
+    backup_exists = DEFAULT_BACKUP_FILE.exists()
+    backup_size = DEFAULT_BACKUP_FILE.stat().st_size if backup_exists else 0
+    mtime = datetime.fromtimestamp(DEFAULT_BACKUP_FILE.stat().st_mtime).isoformat() if backup_exists else None
+
+    history_files = list(HISTORY_DIR.glob("itineraries_*.json")) if HISTORY_DIR.exists() else []
+    deleted_tombstones = db.query(DeletedItem).count()
+
+    return {
+        "status": "ready" if backup_exists else "no_backup",
+        "backup_path": str(DEFAULT_BACKUP_FILE),
+        "backup_exists": backup_exists,
+        "backup_size_bytes": backup_size,
+        "last_backup_time": mtime,
+        "historical_snapshots_count": len(history_files),
+        "total_trips": db.query(Trip).count(),
+        "deletion_memory_tombstones": deleted_tombstones
+    }
+
+
+@app.post("/api/backup/now")
+async def trigger_manual_backup(request: Request, db: Session = Depends(get_db)):
+    """Trigger an immediate atomic backup of all itineraries, stays, items, and deletion memory."""
+    user = get_current_user(request, db)
+    res = backup_itineraries(db, save_history=True)
+    return res
+
+
+@app.post("/api/backup/restore")
+async def trigger_manual_restore(request: Request, db: Session = Depends(get_db)):
+    """Restore and sync itineraries from JSON backup while strictly preserving deletion memory."""
+    user = get_current_user(request, db)
+    res = restore_itineraries(db, sync_mode=True)
+    return res
+
 
 
 

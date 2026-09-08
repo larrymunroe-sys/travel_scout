@@ -9,6 +9,7 @@ from scout.geocoding import resolve_city_coordinates, resolve_venue_coordinates
 from scout.preseeded_data import PRESEEDED_ITEMS
 from scout.web_search import live_city_search
 from scout.transit import resolve_stay_for_date, calculate_transit_from_stay
+from scout.backup import compute_item_hash, is_item_deleted_and_unchanged, auto_backup_on_change
 
 class ScoutEngine:
     def __init__(self):
@@ -331,6 +332,18 @@ class ScoutEngine:
             trip = db.query(Trip).filter(Trip.id == trip_id).first()
             owner_id = trip.owner_id if trip else None
             for item_data in preseeded:
+                cand_hash = compute_item_hash(
+                    title=item_data["title"],
+                    description=item_data.get("description"),
+                    highlight=item_data.get("highlight"),
+                    address=item_data.get("address"),
+                    cost=item_data.get("cost"),
+                    time_info=item_data.get("time_info"),
+                    url=item_data.get("url")
+                )
+                if is_item_deleted_and_unchanged(db, trip_id, item_data["title"], cand_hash):
+                    continue
+
                 item = ItineraryItem(
                     trip_id=trip_id,
                     city_segment_id=segment.id,
@@ -353,6 +366,7 @@ class ScoutEngine:
                 db.add(item)
             db.commit()
 
+        auto_backup_on_change(db)
         return segment
 
     def delete_city(self, db: Session, trip_id: str, city_id: str) -> bool:
@@ -369,6 +383,7 @@ class ScoutEngine:
         for idx, c in enumerate(remaining, 1):
             c.order_index = idx
         db.commit()
+        auto_backup_on_change(db)
         return True
 
     def add_stay(
@@ -492,6 +507,18 @@ class ScoutEngine:
                             ItineraryItem.title == f["title"]
                         ).first()
                         if not exists:
+                            cand_hash = compute_item_hash(
+                                title=f["title"],
+                                description=f.get("description"),
+                                highlight=f.get("highlight"),
+                                address=f.get("address"),
+                                cost=f.get("cost"),
+                                time_info=f.get("time_info"),
+                                url=f.get("url")
+                            )
+                            if is_item_deleted_and_unchanged(db, trip_id, f["title"], cand_hash):
+                                continue
+
                             item = ItineraryItem(
                                 trip_id=trip_id,
                                 city_segment_id=city.id,
@@ -517,6 +544,8 @@ class ScoutEngine:
                     print(f"Error scanning {city.city_name} for '{query}': {e}")
 
         db.commit()
+        if all_new_items:
+            auto_backup_on_change(db)
         return {
             "cities_scanned": len(cities),
             "newly_discovered": len(all_new_items),

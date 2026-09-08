@@ -39,6 +39,7 @@ class Trip(Base):
     city_segments = relationship("CitySegment", back_populates="trip", cascade="all, delete-orphan", order_by="CitySegment.order_index")
     items = relationship("ItineraryItem", back_populates="trip", cascade="all, delete-orphan")
     expenses = relationship("TripExpense", back_populates="trip", cascade="all, delete-orphan", order_by="TripExpense.created_at.desc()")
+    deleted_items = relationship("DeletedItem", back_populates="trip", cascade="all, delete-orphan")
 
 
 class TripCollaborator(Base):
@@ -143,4 +144,19 @@ class TripExpense(Base):
 
     trip = relationship("Trip", back_populates="expenses")
     paid_by = relationship("User", back_populates="expenses_paid", foreign_keys=[paid_by_user_id])
+
+
+class DeletedItem(Base):
+    """Registry of deleted cards to prevent unwanted re-importing upon code refresh/scans unless information has changed."""
+    __tablename__ = "deleted_items"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    trip_id = Column(String(36), ForeignKey("trips.id"), nullable=False)
+    title = Column(String(255), nullable=False)
+    content_hash = Column(String(64), nullable=False)
+    city_name = Column(String(128), nullable=True)
+    deleted_at = Column(DateTime, default=datetime.utcnow)
+
+    trip = relationship("Trip", back_populates="deleted_items")
+
 

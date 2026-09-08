@@ -14,6 +14,7 @@ from database.models import CitySegment, ItineraryItem
 from scout.web_search import live_city_search
 from scout.geocoding import resolve_city_coordinates, resolve_venue_coordinates
 from scout.transit import generate_directions_url
+from scout.backup import compute_item_hash, is_item_deleted_and_unchanged, auto_backup_on_change
 
 # Well-known local media & cultural publications for major destinations
 KNOWN_LOCAL_PUBLICATIONS: Dict[str, List[Dict[str, str]]] = {
@@ -324,21 +325,40 @@ def curate_and_ingest_events(
         ).first()
 
         if not exists:
+            cand_cost = ev.get("cost", "Free Admission" if ev.get("is_free") else "Check venue")
+            cand_time = ev.get("time_info", "Check local listings")
+            cand_hl = ev.get("highlight")
+            cand_desc = ev.get("description")
+            cand_addr = ev.get("address", "")
+            cand_url = ev.get("url")
+
+            cand_hash = compute_item_hash(
+                title=ev_title,
+                description=cand_desc,
+                highlight=cand_hl,
+                address=cand_addr,
+                cost=cand_cost,
+                time_info=cand_time,
+                url=cand_url
+            )
+            if is_item_deleted_and_unchanged(db, trip_id, ev_title, cand_hash):
+                continue
+
             item = ItineraryItem(
                 trip_id=trip_id,
                 city_segment_id=city_segment_id,
                 title=ev_title,
                 category=ev.get("category", "gems"),
                 neighborhood=ev.get("neighborhood", "Cultural District"),
-                address=ev.get("address", ""),
+                address=cand_addr,
                 lat=ev.get("lat"),
                 lon=ev.get("lon"),
-                cost=ev.get("cost", "Free Admission" if ev.get("is_free") else "Check venue"),
+                cost=cand_cost,
                 is_free=ev.get("is_free", False),
-                time_info=ev.get("time_info", "Check local listings"),
-                highlight=ev.get("highlight"),
-                description=ev.get("description"),
-                url=ev.get("url"),
+                time_info=cand_time,
+                highlight=cand_hl,
+                description=cand_desc,
+                url=cand_url,
                 source_platform=ev.get("source_platform", "Local Press Scout"),
                 assigned_date="todo",
                 added_by_user_id=user_id
@@ -348,6 +368,7 @@ def curate_and_ingest_events(
 
     if new_items:
         db.commit()
+        auto_backup_on_change(db)
 
     return new_items
 
