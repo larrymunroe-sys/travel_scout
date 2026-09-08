@@ -553,8 +553,8 @@ async function loadInitialTrip() {
           <div style="grid-column: 1/-1; text-align: center; padding: 3.5rem 1.5rem; color: var(--text-muted); background: var(--bg-card); border-radius: var(--radius-md); border: 1px dashed var(--border);">
             <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">🎒</div>
             <h3 style="color: var(--text-main); margin-bottom: 0.4rem;">No Active Itinerary</h3>
-            <p style="font-size: 0.88rem; margin-bottom: 1.2rem;">You do not have any trips saved right now. Click "➕ New Trip" in the header to start a new adventure!</p>
-            <button class="btn btn-primary" onclick="document.getElementById('createTripModal').style.display='flex'">➕ Start a New Trip</button>
+            <p style="font-size: 0.88rem; margin-bottom: 1.2rem;">You do not have any trips saved right now. Click "➕ New Itinerary" in the header to start a new adventure!</p>
+            <button class="btn btn-primary" onclick="document.getElementById('createTripModal').style.display='flex'">➕ Create New Itinerary</button>
           </div>
         `;
       }
@@ -2125,21 +2125,26 @@ function initModals() {
       const country = document.getElementById("newCityCountry").value.trim() || "";
       const startDate = document.getElementById("newCityStart").value;
       const endDate = document.getElementById("newCityEnd").value;
-      const hotelName = document.getElementById("newCityHotel").value.trim();
-      const hotelAddress = document.getElementById("newCityAddress").value.trim();
+      let hotelName = document.getElementById("newCityHotel")?.value.trim() || "";
+      const hotelAddress = document.getElementById("newCityAddress")?.value.trim() || "";
 
-      if (!cityName || !startDate || !endDate) {
-        alert("Please specify the city name, arrival date, and departure date.");
-        return;
+      if (!hotelName) {
+        if (hotelAddress) {
+          hotelName = "Friend's Home / Lodging";
+        } else {
+          hotelName = `${cityName} Lodging`;
+        }
       }
+      const effectiveAddress = hotelAddress || hotelName || (country ? `${cityName}, ${country}` : cityName);
 
       const payload = {
         city_name: cityName,
         country: country,
         start_date: startDate,
         end_date: endDate,
-        hotel_name: hotelName || `${cityName} Central Hotel`,
-        hotel_address: hotelAddress || (country ? `${cityName}, ${country}` : cityName),
+        hotel_name: hotelName,
+        hotel_address: effectiveAddress,
+        address: effectiveAddress
       };
 
       try {

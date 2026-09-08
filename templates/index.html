@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="/static/styles.css?v=3.5" />
+  <link rel="stylesheet" href="/static/styles.css?v=3.6" />
   <link rel="manifest" href="/static/manifest.json" />
   <meta name="theme-color" content="#0284c7" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -26,8 +26,8 @@
           <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
             <h1 class="logo-title">Travel Scout</h1>
             <button id="openEditTripBtn" class="btn btn-secondary btn-sm" style="padding:0.2rem 0.55rem; font-size:0.75rem;" title="Rename journey or edit description">✏️ Customize</button>
-            <button id="openCreateTripBtn" class="btn btn-secondary btn-sm" style="padding:0.2rem 0.55rem; font-size:0.75rem;" title="Start a fresh trip from scratch">➕ New Trip</button>
-            <button id="headerDeleteTripBtn" class="btn btn-secondary btn-sm" style="padding:0.2rem 0.55rem; font-size:0.75rem; background:rgba(244,63,94,0.15); color:#fca5a5; border:1px solid rgba(244,63,94,0.4); cursor:pointer;" title="Permanently delete this entire trip">🗑️ Delete Trip</button>
+            <button id="openCreateTripBtn" class="btn btn-secondary btn-sm" style="padding:0.2rem 0.55rem; font-size:0.75rem; font-weight:600;" title="Create a fresh itinerary from scratch">➕ New Itinerary</button>
+            <button id="headerDeleteTripBtn" class="btn btn-secondary btn-sm" style="padding:0.2rem 0.55rem; font-size:0.75rem; background:rgba(244,63,94,0.15); color:#fca5a5; border:1px solid rgba(244,63,94,0.4); cursor:pointer;" title="Permanently delete this entire itinerary">🗑️ Delete</button>
             <select id="tripSwitcherSelect" class="user-switcher" style="padding:0.25rem 0.5rem; font-size:0.75rem; border-radius:6px; background:rgba(255,255,255,0.06); border:1px solid var(--border); color:var(--text-main);" title="Switch between saved itineraries"></select>
           </div>
           <p class="logo-subtitle" id="tripSubtitle">Collaborative Multi-City Travel Planner</p>
@@ -481,13 +481,22 @@
             <input type="date" id="newCityEnd" required />
           </div>
         </div>
-        <div class="form-group">
-          <label>Starting Hotel / Accommodation Name</label>
-          <input type="text" id="newCityHotel" placeholder="e.g. Tivoli Palácio de Seteais" required />
-        </div>
-        <div class="form-group">
-          <label>Hotel Address</label>
-          <input type="text" id="newCityAddress" placeholder="e.g. Rua Barbosa du Bocage 8, Sintra" required />
+        <div style="background:rgba(56,189,248,0.06); border:1px solid rgba(56,189,248,0.25); border-radius:8px; padding:0.9rem; margin-bottom:1rem;">
+          <div style="display:flex; align-items:center; gap:0.4rem; margin-bottom:0.6rem;">
+            <span style="font-size:1.1rem;">🏡</span>
+            <strong style="color:#38bdf8; font-size:0.88rem;">Accommodations &amp; Starting Address</strong>
+          </div>
+          <div class="form-group" style="margin-bottom:0.7rem;">
+            <label>Lodging Name (Hotel, Airbnb, or Friend's Place)</label>
+            <input type="text" id="newCityHotel" placeholder="e.g. Tivoli Palácio, Sarah's Place, or Downtown Airbnb" />
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label style="color:#38bdf8; font-weight:700;">📍 Street Address / Friend's Address (Optional)</label>
+            <input type="text" id="newCityAddress" placeholder="e.g. Rua Barbosa du Bocage 8, Sintra or 3900 30th St" style="border-color:rgba(56,189,248,0.5);" />
+            <small style="color:var(--text-muted); font-size:0.76rem; margin-top:0.35rem; display:block; line-height:1.4;">
+              💡 <strong>Staying at a friend's home or Airbnb?</strong> Adding the street address allows Google Maps to accurately calculate walking times and directions directly from where you are staying.
+            </small>
+          </div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" id="cancelAddCityBtn">Cancel</button>
@@ -657,11 +666,11 @@
     </div>
   </div>
 
-  <!-- MODAL 5: CREATE NEW CUSTOM TRIP -->
+  <!-- MODAL 5: CREATE NEW CUSTOM ITINERARY / TRIP -->
   <div class="modal-overlay" id="createTripModal" style="display:none;">
     <div class="modal-card">
       <div class="modal-header">
-        <h3>✨ Start a New Custom Journey</h3>
+        <h3>✨ Create New Itinerary</h3>
         <button class="modal-close" id="closeCreateTripBtn">&times;</button>
       </div>
       <form id="createTripForm">
@@ -669,37 +678,46 @@
           Create a fresh itinerary from scratch for any region or country!
         </p>
         <div class="form-group">
-          <label>Trip Name</label>
+          <label>Itinerary Name <span style="color:#f43f5e;">*</span></label>
           <input type="text" id="newTripTitle" placeholder="e.g. Japan Cherry Blossom & Culinary Tour" required />
         </div>
         <div class="form-group">
-          <label>First Destination City</label>
+          <label>First Destination City <span style="color:#f43f5e;">*</span></label>
           <input type="text" id="newTripCity" placeholder="e.g. Tokyo" required />
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>Start Date</label>
+            <label>Start Date <span style="color:#f43f5e;">*</span></label>
             <input type="date" id="newTripStart" required />
           </div>
           <div class="form-group">
-            <label>End Date</label>
+            <label>End Date <span style="color:#f43f5e;">*</span></label>
             <input type="date" id="newTripEnd" required />
           </div>
         </div>
-        <div class="form-group">
-          <label>Where are you staying? (Hotel, Airbnb, or Friend's Home)</label>
-          <input type="text" id="newTripHotel" placeholder="e.g. The Lafayette Hotel, Sarah's Place, or Downtown Airbnb" />
+
+        <!-- Accommodations & Starting Address Box -->
+        <div style="background:rgba(56,189,248,0.06); border:1px solid rgba(56,189,248,0.25); border-radius:8px; padding:0.9rem; margin-bottom:1rem;">
+          <div style="display:flex; align-items:center; gap:0.4rem; margin-bottom:0.6rem;">
+            <span style="font-size:1.1rem;">🏡</span>
+            <strong style="color:#38bdf8; font-size:0.88rem;">Accommodations &amp; Starting Address</strong>
+          </div>
+          <div class="form-group" style="margin-bottom:0.7rem;">
+            <label>Lodging Name (Hotel, Airbnb, or Friend's Place)</label>
+            <input type="text" id="newTripHotel" placeholder="e.g. Sarah's House, The Lafayette Hotel, or Downtown Airbnb" />
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label style="color:#38bdf8; font-weight:700;">📍 Street Address / Friend's Home Address (Optional)</label>
+            <input type="text" id="newTripHotelAddress" placeholder="e.g. 3900 30th St, San Diego, CA 92104" style="border-color:rgba(56,189,248,0.5);" />
+            <small style="color:var(--text-muted); font-size:0.76rem; margin-top:0.35rem; display:block; line-height:1.4;">
+              💡 <strong>Staying with a friend or in an Airbnb?</strong> Enter their exact street address here. Travel Scout uses this address as the starting origin for walking times and Google Maps navigation to all scheduled stops.
+            </small>
+          </div>
         </div>
-        <div class="form-group">
-          <label>Lodging / Friend's Street Address (Optional)</label>
-          <input type="text" id="newTripHotelAddress" placeholder="e.g. 3900 30th St, San Diego, CA 92104" />
-          <small style="color:var(--text-muted); font-size:0.75rem; margin-top:0.2rem; display:block;">
-            💡 Staying at a friend's home or Airbnb? Adding the street address allows Google Maps to accurately map directions and walking times directly from where you are staying.
-          </small>
-        </div>
+
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" id="cancelCreateTripBtn">Cancel</button>
-          <button type="submit" class="btn btn-primary">Create Journey</button>
+          <button type="submit" class="btn btn-primary">Create Itinerary</button>
         </div>
       </form>
     </div>
@@ -1343,7 +1361,7 @@
   </footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/app.js?v=3.5"></script>
+  <script src="/static/app.js?v=3.6"></script>
 </body>
 </html>
 

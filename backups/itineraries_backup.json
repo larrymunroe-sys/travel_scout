@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "created_at": "2026-09-08T17:05:05.711623",
-  "total_trips": 10,
+  "created_at": "2026-09-08T17:14:34.856284",
+  "total_trips": 11,
   "trips": [
     {
       "id": "5d8976cf-9c0a-4bf5-9a24-f3892adacc3b",
@@ -3182,6 +3182,48 @@
           "deleted_at": "2026-09-08T17:05:05.549916"
         }
       ],
+      "expenses": []
+    },
+    {
+      "id": "804ec60b-65ea-423d-9b31-04ae94265c63",
+      "title": "San Diego Weekend Getaway",
+      "description": "Staying at Sarah's place in North Park.",
+      "owner_id": "3d3c6b9c-893e-4f48-afe8-f973cfb6b39b",
+      "created_at": "2026-09-08T17:14:34.505639",
+      "collaborators": [
+        {
+          "user_id": "3d3c6b9c-893e-4f48-afe8-f973cfb6b39b",
+          "role": "owner",
+          "email": "bob.miller@gmail.com",
+          "name": "Bob Miller"
+        }
+      ],
+      "city_segments": [
+        {
+          "id": "3f34e575-dc83-409f-8593-79dd6796d157",
+          "city_name": "San Diego",
+          "country": "United States",
+          "start_date": "2027-07-10",
+          "end_date": "2027-07-15",
+          "order_index": 1,
+          "lat": 32.7157,
+          "lon": -117.1611,
+          "stays": [
+            {
+              "id": "95d25c86-7320-4b5b-a776-45c2513e57e4",
+              "name": "Sarah's House",
+              "address": "3900 30th St, San Diego, CA 92104",
+              "start_date": "2027-07-10",
+              "end_date": "2027-07-15",
+              "lat": 32.748569,
+              "lon": -117.130242,
+              "notes": "Primary accommodation for San Diego."
+            }
+          ]
+        }
+      ],
+      "items": [],
+      "deleted_items": [],
       "expenses": []
     }
   ]

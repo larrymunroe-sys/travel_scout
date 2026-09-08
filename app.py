@@ -310,8 +310,9 @@ class AddCityPayload(BaseModel):
     country: Optional[str] = ""
     start_date: str
     end_date: str
-    hotel_name: str
-    hotel_address: str
+    hotel_name: Optional[str] = None
+    hotel_address: Optional[str] = None
+    address: Optional[str] = None
 
 class UpdateCityPayload(BaseModel):
     city_name: Optional[str] = None
@@ -1344,15 +1345,25 @@ async def add_city(trip_id: str, payload: AddCityPayload, request: Request, db: 
             raise HTTPException(status_code=400, detail="No active trip found. Please create a trip first.")
 
     check_trip_access(trip_id, user, db, require_edit=True)
+    effective_address = (payload.address or payload.hotel_address or "").strip()
+    effective_hotel_name = (payload.hotel_name or "").strip()
+    if not effective_hotel_name:
+        if effective_address:
+            effective_hotel_name = "Friend's Home / Lodging" if any(w in effective_address.lower() for w in ["apt", "ave", "st", "blvd", "rd", "way", "dr", "lane", "ct"]) else f"{payload.city_name} Stay"
+        else:
+            effective_hotel_name = f"{payload.city_name} Hotel"
+    if not effective_address:
+        effective_address = effective_hotel_name or f"{payload.city_name}"
+
     seg = scout_engine.add_city(
         db=db,
         trip_id=trip_id,
         city_name=payload.city_name,
-        country=payload.country,
+        country=payload.country or "",
         start_date=payload.start_date,
         end_date=payload.end_date,
-        hotel_name=payload.hotel_name,
-        hotel_address=payload.hotel_address
+        hotel_name=effective_hotel_name,
+        hotel_address=effective_address
     )
     return {"status": "created", "city_id": seg.id, "city_name": seg.city_name, "trip_id": trip_id}
 
