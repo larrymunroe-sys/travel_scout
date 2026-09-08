@@ -107,6 +107,7 @@ class ItineraryItem(Base):
     url = Column(String(512), nullable=True)
     source_platform = Column(String(64), default="Curated")
     assigned_date = Column(String(10), nullable=True)  # "todo" or "YYYY-MM-DD"
+    order_index = Column(Integer, default=0)
     added_by_user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     

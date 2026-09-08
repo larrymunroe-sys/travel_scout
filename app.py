@@ -25,6 +25,12 @@ from scout.engine import ScoutEngine
 from scout.web_search import live_city_search
 from scout.transit import resolve_stay_for_date, resolve_stay_for_trip_date, calculate_transit_from_stay
 from scout.local_agent import run_local_agent_for_city_segment, discover_city_publications, EVENT_SCAN_QUERIES
+from scout.dining_agent import run_dining_agent_for_city_segment
+from scout.weather_tactician import evaluate_trip_weather_advisory
+from scout.transit_optimizer import optimize_trip_day_schedule
+from scout.stay_scout import evaluate_trip_lodging
+from scout.budget_comptroller import audit_trip_budget
+from scout.concierge_agent import evaluate_reservation_plan
 from scout.weather import get_trip_weather
 from scout.calendar_sync import generate_trip_ics, generate_google_calendar_url
 
@@ -2123,4 +2129,162 @@ async def delete_trip_expense(
     db.delete(exp)
     db.commit()
     return {"status": "success"}
+
+
+# ==================== AUTONOMOUS SPECIALIST AGENTS ====================
+
+class LocalScoutPayload(BaseModel):
+    city_id: Optional[str] = "all"
+    event_types: Optional[List[str]] = None
+    max_per_type: int = 3
+    enrich_locations: bool = True
+
+class DiningScoutPayload(BaseModel):
+    city_id: Optional[str] = "all"
+    categories: Optional[List[str]] = None
+    max_per_type: int = 3
+    enrich_locations: bool = True
+
+class TransitOptimizePayload(BaseModel):
+    date: str
+    apply: bool = False
+
+
+@app.post("/api/trips/{trip_id}/scout/local-agent")
+async def run_trip_local_cultural_scout(
+    trip_id: str,
+    payload: LocalScoutPayload,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Execute the Hyper-Local Cultural Scout Agent across trip destination cities."""
+    user = get_current_user(request, db)
+    trip = check_trip_access(trip_id, user, db, require_edit=True)
+
+    segments = trip.city_segments
+    if payload.city_id and payload.city_id != "all":
+        segments = [s for s in segments if s.id == payload.city_id]
+
+    results = []
+    total_discovered = 0
+    for seg in segments:
+        res = run_local_agent_for_city_segment(
+            db=db,
+            trip_id=trip.id,
+            city_id=seg.id,
+            user_id=user.id,
+            event_types=payload.event_types,
+            max_per_type=payload.max_per_type,
+            enrich_locations=payload.enrich_locations
+        )
+        total_discovered += res.get("newly_discovered", 0)
+        results.append(res)
+
+    return {
+        "status": "success",
+        "trip_id": trip_id,
+        "total_discovered": total_discovered,
+        "results": results
+    }
+
+
+@app.post("/api/trips/{trip_id}/scout/dining-agent")
+async def run_trip_dining_scout(
+    trip_id: str,
+    payload: DiningScoutPayload,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Execute the Culinary & Hidden Gems Scout Agent across trip destination cities."""
+    user = get_current_user(request, db)
+    trip = check_trip_access(trip_id, user, db, require_edit=True)
+
+    segments = trip.city_segments
+    if payload.city_id and payload.city_id != "all":
+        segments = [s for s in segments if s.id == payload.city_id]
+
+    results = []
+    total_discovered = 0
+    for seg in segments:
+        res = run_dining_agent_for_city_segment(
+            db=db,
+            trip_id=trip.id,
+            city_id=seg.id,
+            user_id=user.id,
+            categories=payload.categories,
+            max_per_type=payload.max_per_type,
+            enrich_locations=payload.enrich_locations
+        )
+        total_discovered += res.get("newly_discovered", 0)
+        results.append(res)
+
+    return {
+        "status": "success",
+        "trip_id": trip_id,
+        "total_discovered": total_discovered,
+        "results": results
+    }
+
+
+@app.get("/api/trips/{trip_id}/weather/tactical-advisory")
+async def get_weather_tactical_advisory(
+    trip_id: str,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Run Weather Tactician: detects rain risk, indoor swap recommendations, and packing lists."""
+    user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=False)
+    return evaluate_trip_weather_advisory(db, trip_id)
+
+
+@app.post("/api/trips/{trip_id}/transit/optimize-day")
+async def optimize_trip_transit_route(
+    trip_id: str,
+    payload: TransitOptimizePayload,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Run Transit Optimizer: orders scheduled items to minimize walking distance and recommends transit cards."""
+    user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=payload.apply)
+    return optimize_trip_day_schedule(db, trip_id, payload.date, apply_order_index=payload.apply)
+
+
+@app.get("/api/trips/{trip_id}/stays/evaluate")
+async def evaluate_trip_stays_agent(
+    trip_id: str,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Run Stay Scout: grades lodging walkability, average distance to activities, and transit scores."""
+    user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=False)
+    return evaluate_trip_lodging(db, trip_id)
+
+
+@app.get("/api/trips/{trip_id}/budget/audit")
+async def audit_trip_budget_agent(
+    trip_id: str,
+    request: Request,
+    target_budget: Optional[float] = None,
+    db: Session = Depends(get_db)
+):
+    """Run Budget Comptroller: expense breakdown, fair shares, minimal debt settlement plan, and burn rate."""
+    user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=False)
+    return audit_trip_budget(db, trip_id, target_budget=target_budget)
+
+
+@app.get("/api/trips/{trip_id}/concierge/plan")
+async def get_concierge_reservation_plan(
+    trip_id: str,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Run Concierge Agent: audits all activities for ticket/reservation urgency and booking deadlines."""
+    user = get_current_user(request, db)
+    check_trip_access(trip_id, user, db, require_edit=False)
+    return evaluate_reservation_plan(db, trip_id)
+
 

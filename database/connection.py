@@ -57,6 +57,8 @@ def init_db():
                     cursor.execute("ALTER TABLE itinerary_items ADD COLUMN booking_status VARCHAR(32) DEFAULT 'unbooked'")
                 if "booking_ref" not in cols:
                     cursor.execute("ALTER TABLE itinerary_items ADD COLUMN booking_ref VARCHAR(255)")
+                if "order_index" not in cols:
+                    cursor.execute("ALTER TABLE itinerary_items ADD COLUMN order_index INTEGER DEFAULT 0")
                 conn.connection.commit()
         except Exception as e:
             print("Schema migration note:", e)

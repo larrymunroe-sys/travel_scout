@@ -84,10 +84,39 @@ Before concluding any code change or reporting back to the user:
 
 ## 4. Skills & Autonomous Agents (`.agents/`)
 
-- Domain-specific skills are located under `.agents/skills/<skill-name>/SKILL.md`.
-- Primary skill: **`local-city-scout`**
-  - Discovers local press, alternative weeklies, concerts, indie cinema, record store performances, and festivals for destination cities.
-  - Ingests events into the `Explore & Discover` tab (`assigned_date="todo"`).
-  - CLI script: `.agents/skills/local-city-scout/scripts/scout_events.py`
-  - API endpoint: `POST /api/trips/{trip_id}/scout/local-agent`
-- When expanding scout capabilities, maintain consistent category taxonomy (`movies`, `music`, `records`, `art`, `festivals`, `markets`, `free`, `dining`, `press`).
+Domain-specific specialist skills are located under `.agents/skills/<skill-name>/SKILL.md`:
+
+1. **`local-city-scout`** (Hyper-Local Destination City Cultural Scout):
+   - Discovers local press, alternative weeklies, concerts, indie cinema, record store gigs, and festivals for destination cities.
+   - CLI script: `.agents/skills/local-city-scout/scripts/scout_events.py`
+   - API endpoint: `POST /api/trips/{trip_id}/scout/local-agent`
+
+2. **`dining-scout`** (Culinary & Hidden Gems Scout):
+   - Discovers artisan bakeries, specialty coffee roasters, casual street food, dinner bistros, and craft cocktail bars.
+   - CLI script: `.agents/skills/dining-scout/scripts/scout_dining.py`
+   - API endpoint: `POST /api/trips/{trip_id}/scout/dining-agent`
+
+3. **`weather-tactician`** (Weather Tactician & Packing Advisor):
+   - Analyzes real-time Open-Meteo forecasts, alerts on rain/heat risk, recommends indoor wishlist swaps, and drafts dynamic packing checklists.
+   - CLI script: `.agents/skills/weather-tactician/scripts/weather_tactician.py`
+   - API endpoint: `GET /api/trips/{trip_id}/weather/tactical-advisory`
+
+4. **`transit-optimizer`** (Transit Route & Itinerary Day Optimizer):
+   - Solves the daily itinerary routing puzzle (TSP heuristic) starting from the active hotel stay to minimize walking distance and transit transfers; recommends local transit cards (MTS Pronto, Navegante, Oyster, Navigo).
+   - CLI script: `.agents/skills/transit-optimizer/scripts/optimize_route.py`
+   - API endpoint: `POST /api/trips/{trip_id}/transit/optimize-day`
+
+5. **`stay-scout`** (Lodging & Neighborhood Evaluator):
+   - Scores hotel walkability (0-100), calculates commute times to planned sights, and evaluates neighborhood character.
+   - CLI script: `.agents/skills/stay-scout/scripts/scout_stay.py`
+   - API endpoint: `GET /api/trips/{trip_id}/stays/evaluate`
+
+6. **`budget-comptroller`** (Group Budget & Expense Comptroller):
+   - Audits multi-currency expenditures, projects daily burn rates, computes fair shares, and produces minimal debt settlement graphs.
+   - CLI script: `.agents/skills/budget-comptroller/scripts/audit_budget.py`
+   - API endpoint: `GET /api/trips/{trip_id}/budget/audit`
+
+7. **`concierge-agent`** (Autonomous Concierge & Reservation Assistant):
+   - Audits planned activities for booking requirements, classifies reservation urgency (critical vs. walk-in), and produces an actionable reservation timeline.
+   - CLI script: `.agents/skills/concierge-agent/scripts/concierge_plan.py`
+   - API endpoint: `GET /api/trips/{trip_id}/concierge/plan`
