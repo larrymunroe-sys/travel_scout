@@ -45,9 +45,11 @@ window.closeLogin = function() {
 
 // Global Create Trip Modal Controls
 window.openCreateTripModal = function() {
+  document.querySelectorAll(".modal-overlay").forEach(m => m.style.display = "none");
   const modal = document.getElementById("createTripModal");
   if (modal) {
     modal.style.display = "flex";
+    modal.style.zIndex = "99999";
     const titleInput = document.getElementById("newTripTitle");
     if (titleInput) setTimeout(() => titleInput.focus(), 80);
   }
@@ -64,6 +66,7 @@ window.openEditTripModal = function() {
     window.openCreateTripModal();
     return;
   }
+  document.querySelectorAll(".modal-overlay").forEach(m => m.style.display = "none");
   const titleInput = document.getElementById("editTripTitleInput");
   const descInput = document.getElementById("editTripDescInput");
   if (titleInput && currentTripData && currentTripData.trip) {
@@ -73,7 +76,10 @@ window.openEditTripModal = function() {
     descInput.value = currentTripData.trip.description || "";
   }
   const modal = document.getElementById("editTripModal");
-  if (modal) modal.style.display = "flex";
+  if (modal) {
+    modal.style.display = "flex";
+    modal.style.zIndex = "99999";
+  }
 };
 
 window.closeEditTripModal = function() {
@@ -396,6 +402,9 @@ async function loadCurrentUser() {
     const data = await res.json();
     currentUser = data.current_user;
     window.currentUser = currentUser;
+    if (data.session_token) {
+      localStorage.setItem("travel_scout_session", data.session_token);
+    }
     if (currentUser && currentUser.id) {
       localStorage.setItem("travel_scout_user_id", currentUser.id);
     }

@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "created_at": "2026-09-08T19:08:44.640258",
-  "total_trips": 16,
+  "created_at": "2026-09-08T19:25:18.626962",
+  "total_trips": 17,
   "trips": [
     {
       "id": "5d8976cf-9c0a-4bf5-9a24-f3892adacc3b",
@@ -3732,6 +3732,48 @@
           "content_hash": "b2372ab84935dd8b7621ade2f6edd3fcb7af4cd9fe68e14295fa188b3bced305"
         }
       ],
+      "deleted_items": [],
+      "expenses": []
+    },
+    {
+      "id": "22fe5a31-8c5c-4af3-b133-74a992592e5a",
+      "title": "San Diego Taco & Surfing Journey",
+      "description": "Custom itinerary designed by Larry",
+      "owner_id": "239d32a8-e56f-4c1f-9913-cde4faacfb02",
+      "created_at": "2026-09-08T19:25:18.145529",
+      "collaborators": [
+        {
+          "user_id": "239d32a8-e56f-4c1f-9913-cde4faacfb02",
+          "role": "owner",
+          "email": "larry@travelscout.dev",
+          "name": "Larry"
+        }
+      ],
+      "city_segments": [
+        {
+          "id": "02a78861-4f5d-45bd-b4c0-4a9388b37ba2",
+          "city_name": "San Diego",
+          "country": "United States",
+          "start_date": "2026-10-10",
+          "end_date": "2026-10-15",
+          "order_index": 1,
+          "lat": 32.7157,
+          "lon": -117.1611,
+          "stays": [
+            {
+              "id": "c4c9c8db-04e6-46a2-be67-45ba74388be3",
+              "name": "Sarah's Beach Bungalow",
+              "address": "4500 Ocean Blvd, San Diego, CA",
+              "start_date": "2026-10-10",
+              "end_date": "2026-10-15",
+              "lat": 32.7961427,
+              "lon": -117.2567138,
+              "notes": "Primary accommodation for San Diego."
+            }
+          ]
+        }
+      ],
+      "items": [],
       "deleted_items": [],
       "expenses": []
     }

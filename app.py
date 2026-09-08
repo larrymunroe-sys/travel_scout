@@ -641,10 +641,14 @@ async def dev_login(payload: DevLoginPayload, request: Request, response: Respon
 async def get_me(request: Request, response: Response, db: Session = Depends(get_db)):
     user = get_optional_current_user(request, db)
     all_users = db.query(User).all()
+    session_token = request.cookies.get(SESSION_COOKIE_NAME) or request.headers.get("x-travel-scout-session")
+    if user and not session_token:
+        session_token = sign_session_token(user.id)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return {
+        "session_token": session_token,
         "current_user": {
             "id": user.id,
             "name": user.name,

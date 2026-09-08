@@ -1,8 +1,8 @@
 // Travel Scout Progressive Web App Service Worker (Offline Cache)
-const CACHE_NAME = "travel-scout-v4.2";
+const CACHE_NAME = "travel-scout-v4.3";
 const PRECACHE_URLS = [
-  "/static/styles.css",
-  "/static/app.js",
+  "/static/styles.css?v=4.3",
+  "/static/app.js?v=4.3",
   "/static/manifest.json",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -50,36 +50,24 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 2. Skip non-GET requests
+  // 2. Skip non-GET requests (POST, PUT, DELETE always direct to network)
   if (event.request.method !== "GET") {
     return;
   }
 
-  // 3. NEVER intercept auth routes
+  // 3. NEVER intercept auth routes (session, google oauth, dev-login)
   if (url.pathname.startsWith("/auth/")) {
     return;
   }
 
-  // 4. Navigation requests: network-only, inline offline fallback
+  // 4. NEVER intercept navigation requests (HTML pages)
+  //    Bypassing SW ensures native browser navigation, cookie handling,
+  //    OAuth redirects, and prevents synthetic 503 errors during server spin-up.
   if (event.request.mode === "navigate") {
-    event.respondWith(
-      fetch(event.request).catch(() => {
-        return new Response(
-          "<!DOCTYPE html><html><head><title>Travel Scout - Offline</title></head>" +
-          "<body style='font-family:system-ui;text-align:center;padding:4rem;background:#0f172a;color:#e2e8f0;'>" +
-          "<h1>\u{1F30D} Travel Scout</h1>" +
-          "<p>You appear to be offline. Please check your internet connection and reload.</p>" +
-          "<button onclick='location.reload()' style='margin-top:1rem;padding:0.75rem 1.5rem;font-size:1rem;" +
-          "background:#38bdf8;color:#0f172a;border:none;border-radius:8px;cursor:pointer;font-weight:700;'>Retry</button>" +
-          "</body></html>",
-          { status: 503, headers: { "Content-Type": "text/html; charset=utf-8" } }
-        );
-      })
-    );
     return;
   }
 
-  // 5. API routes: network-first, cache fallback
+  // 5. API routes: network-first, with offline cache fallback if available
   if (url.pathname.startsWith("/api/")) {
     event.respondWith(
       fetch(event.request)
@@ -92,7 +80,8 @@ self.addEventListener("fetch", (event) => {
         })
         .catch(() => {
           return caches.match(event.request).then((cached) => {
-            return cached || Response.json(
+            if (cached) return cached;
+            return Response.json(
               { detail: "Offline — data not cached." },
               { status: 503 }
             );
@@ -102,7 +91,8 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 6. Static assets: network-first, cache fallback
+  // 6. Static assets (CSS, JS, images, fonts): Network-first
+  //    If network fails, return cached version. NEVER return a synthetic 503!
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {
@@ -112,10 +102,14 @@ self.addEventListener("fetch", (event) => {
         }
         return networkResponse;
       })
-      .catch(() => {
-        return caches.match(event.request).then((cached) => {
-          return cached || new Response("", { status: 503 });
-        });
+      .catch(async () => {
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+        // If not in cache, fallback to unversioned url or re-attempt
+        const fallback = await caches.match(url.pathname);
+        if (fallback) return fallback;
+        // Let the browser handle the network error naturally, NEVER return synthetic 503
+        throw new Error("Offline asset not cached: " + url.pathname);
       })
   );
 });
