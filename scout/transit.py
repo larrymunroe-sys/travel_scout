@@ -96,8 +96,14 @@ def _build_directions_urls(
         if stay.lat is not None and stay.lon is not None and stay.lat != 0.0:
             orig = f"{stay.lat},{stay.lon}"
         elif stay.address:
-            orig_name = f"{stay.name}, " if stay.name and stay.name not in stay.address else ""
-            orig = urllib.parse.quote(f"{orig_name}{stay.address}")
+            name_lower = (stay.name or "").lower()
+            is_residential = any(w in name_lower for w in [
+                "friend", "house", "home", "airbnb", "apartment", "apt", "staying with", "condo", "couch", "private"
+            ])
+            if is_residential or (stay.name and stay.name in stay.address):
+                orig = urllib.parse.quote(stay.address.strip())
+            else:
+                orig = urllib.parse.quote(f"{stay.name}, {stay.address}".strip())
         else:
             orig = urllib.parse.quote(f"{stay.name or 'Hotel'}, {city_name}".strip())
     else:

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from database.models import User, Trip, TripCollaborator, CitySegment, StayLocation, ItineraryItem
 from scout.config import CITY_PRESETS
-from scout.geocoding import resolve_city_coordinates
+from scout.geocoding import resolve_city_coordinates, resolve_venue_coordinates
 from scout.preseeded_data import PRESEEDED_ITEMS
 from scout.web_search import live_city_search
 from scout.transit import resolve_stay_for_date, calculate_transit_from_stay
@@ -281,6 +281,19 @@ class ScoutEngine:
         stay_lat = city_preset.get("stay_lat", city_lat)
         stay_lon = city_preset.get("stay_lon", city_lon)
 
+        # If a specific hotel or friend's house address is provided, geocode the exact coordinates
+        clean_addr = (hotel_address or "").strip()
+        if clean_addr and clean_addr.lower() != city_name.strip().lower():
+            addr_lat, addr_lon, _ = resolve_venue_coordinates(clean_addr, city_name, effective_country)
+            if addr_lat is not None and addr_lon is not None and (addr_lat != 0.0 or addr_lon != 0.0):
+                stay_lat = addr_lat
+                stay_lon = addr_lon
+            elif hotel_name and hotel_name.strip():
+                h_lat, h_lon, _ = resolve_venue_coordinates(f"{hotel_name}, {clean_addr}", city_name, effective_country)
+                if h_lat is not None and h_lon is not None and (h_lat != 0.0 or h_lon != 0.0):
+                    stay_lat = h_lat
+                    stay_lon = h_lon
+
         # Determine next order index
         max_order = db.query(CitySegment).filter(CitySegment.trip_id == trip_id).count()
 
@@ -373,14 +386,27 @@ class ScoutEngine:
         city_lat = seg.lat if (seg and seg.lat is not None) else 0.0
         city_lon = seg.lon if (seg and seg.lon is not None) else 0.0
 
+        stay_lat = city_lat + 0.002
+        stay_lon = city_lon + 0.002
+        if address and address.strip():
+            addr_lat, addr_lon, _ = resolve_venue_coordinates(address.strip(), seg.city_name if seg else "", seg.country if seg else None)
+            if addr_lat is not None and addr_lon is not None and (addr_lat != 0.0 or addr_lon != 0.0):
+                stay_lat = addr_lat
+                stay_lon = addr_lon
+            elif name and name.strip():
+                h_lat, h_lon, _ = resolve_venue_coordinates(f"{name}, {address}", seg.city_name if seg else "", seg.country if seg else None)
+                if h_lat is not None and h_lon is not None and (h_lat != 0.0 or h_lon != 0.0):
+                    stay_lat = h_lat
+                    stay_lon = h_lon
+
         stay = StayLocation(
             city_segment_id=city_id,
             name=name,
             address=address,
             start_date=start_date,
             end_date=end_date,
-            lat=city_lat + 0.002,
-            lon=city_lon + 0.002,
+            lat=stay_lat,
+            lon=stay_lon,
             notes=notes
         )
         db.add(stay)

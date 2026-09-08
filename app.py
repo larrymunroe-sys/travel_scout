@@ -286,6 +286,8 @@ class CreateTripPayload(BaseModel):
     end_date: Optional[str] = None
     hotel_name: Optional[str] = None
     hotel_address: Optional[str] = None
+    address: Optional[str] = None
+
 
 class UpdateTripPayload(BaseModel):
     title: Optional[str] = None
@@ -816,6 +818,16 @@ async def create_trip(payload: CreateTripPayload, request: Request, db: Session 
     db.commit()
 
     if payload.first_city_name and payload.start_date and payload.end_date:
+        effective_address = (payload.address or payload.hotel_address or "").strip()
+        effective_hotel_name = (payload.hotel_name or "").strip()
+        if not effective_hotel_name:
+            if effective_address:
+                effective_hotel_name = "Friend's Home / Lodging" if any(w in effective_address.lower() for w in ["apt", "ave", "st", "blvd", "rd", "way", "dr", "lane", "ct"]) else f"{payload.first_city_name} Stay"
+            else:
+                effective_hotel_name = f"{payload.first_city_name} Hotel"
+        if not effective_address:
+            effective_address = effective_hotel_name or f"{payload.first_city_name}"
+
         scout_engine.add_city(
             db=db,
             trip_id=trip.id,
@@ -823,8 +835,8 @@ async def create_trip(payload: CreateTripPayload, request: Request, db: Session 
             country=payload.country or "",
             start_date=payload.start_date,
             end_date=payload.end_date,
-            hotel_name=payload.hotel_name or f"{payload.first_city_name} Hotel",
-            hotel_address=payload.hotel_address or f"{payload.first_city_name}"
+            hotel_name=effective_hotel_name,
+            hotel_address=effective_address
         )
 
     return {"status": "created", "trip_id": trip.id, "title": trip.title}

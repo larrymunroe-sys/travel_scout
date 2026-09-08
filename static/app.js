@@ -741,16 +741,23 @@ function renderCitiesTab() {
         Accommodations & Stays in ${escapeHtml(city.city_name)}:
       </div>
       <div class="stays-subgrid">
-        ${city.stays.map(stay => `
+        ${city.stays.map(stay => {
+          const isHomeOrFriend = /friend|house|home|airbnb|apartment|apt|staying with|condo/i.test(stay.name);
+          const stayIcon = isHomeOrFriend ? '🏡' : '🏨';
+          const stayLabel = isHomeOrFriend ? 'Stay' : 'Hotel';
+          const mapsDest = (stay.lat && stay.lon && stay.lat !== 0)
+            ? `${stay.lat},${stay.lon}`
+            : encodeURIComponent(isHomeOrFriend ? stay.address : (stay.name + ', ' + stay.address));
+          return `
           <div class="stay-box">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem;">
               <div class="stay-box-title">
-                <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(stay.name + ', ' + stay.address)}" target="_blank" rel="noopener noreferrer" class="card-title-link" title="Get directions to hotel in Google Maps">
-                  🏨 ${escapeHtml(stay.name)} <span class="card-link-icon">↗</span>
+                <a href="https://www.google.com/maps/dir/?api=1&destination=${mapsDest}" target="_blank" rel="noopener noreferrer" class="card-title-link" title="Get directions to lodging in Google Maps">
+                  ${stayIcon} ${escapeHtml(stay.name)} <span class="card-link-icon">↗</span>
                 </a>
               </div>
               <div style="display:flex; gap:0.35rem; align-items:center;">
-                <button type="button" class="btn btn-secondary btn-sm" onclick='openEditStayModal("${stay.id}", ${JSON.stringify(stay.name).replace(/'/g, "&apos;")}, ${JSON.stringify(stay.address).replace(/'/g, "&apos;")}, "${stay.start_date}", "${stay.end_date}", ${JSON.stringify(stay.notes || "").replace(/'/g, "&apos;")})' style="font-size:0.7rem; padding:0.18rem 0.45rem;" title="Edit hotel name, street address, or dates">
+                <button type="button" class="btn btn-secondary btn-sm" onclick='openEditStayModal("${stay.id}", ${JSON.stringify(stay.name).replace(/'/g, "&apos;")}, ${JSON.stringify(stay.address).replace(/'/g, "&apos;")}, "${stay.start_date}", "${stay.end_date}", ${JSON.stringify(stay.notes || "").replace(/'/g, "&apos;")})' style="font-size:0.7rem; padding:0.18rem 0.45rem;" title="Edit lodging name, street address, or dates">
                   ✏️ Edit
                 </button>
                 ${city.stays.length > 1 ? `
@@ -762,15 +769,16 @@ function renderCitiesTab() {
             <div class="stay-box-address" style="color:#e2e8f0; font-size:0.8rem; margin:0.25rem 0;">📍 <strong>${escapeHtml(stay.address)}</strong></div>
             ${stay.notes ? `<div style="font-size:0.75rem; color:#94a3b8; margin-top:0.2rem;"><em>${escapeHtml(stay.notes)}</em></div>` : ''}
             <div style="margin-top:0.55rem; display:flex; gap:0.4rem; flex-wrap:wrap;">
-              <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(stay.name + ', ' + stay.address)}" target="_blank" rel="noopener noreferrer" class="item-link-pill maps" style="font-size:0.7rem; padding:0.2rem 0.55rem; background:#0284c7; color:#ffffff; font-weight:600;" title="Open directions to hotel in Google Maps with destination pre-populated">
-                🧭 Directions to Hotel ↗
+              <a href="https://www.google.com/maps/dir/?api=1&destination=${mapsDest}" target="_blank" rel="noopener noreferrer" class="item-link-pill maps" style="font-size:0.7rem; padding:0.2rem 0.55rem; background:#0284c7; color:#ffffff; font-weight:600;" title="Open directions to lodging in Google Maps with destination pre-populated">
+                🧭 Directions to ${stayLabel} ↗
               </a>
-              <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stay.name + ' ' + stay.address)}" target="_blank" rel="noopener noreferrer" class="item-link-pill neutral" style="font-size:0.7rem; padding:0.2rem 0.55rem;" title="View hotel location pin in Google Maps">
+              <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stay.address || (stay.name + ' ' + city.city_name))}" target="_blank" rel="noopener noreferrer" class="item-link-pill neutral" style="font-size:0.7rem; padding:0.2rem 0.55rem;" title="View location pin in Google Maps">
                 📍 View on Map ↗
               </a>
             </div>
           </div>
-        `).join("")}
+        `;
+        }).join("")}
       </div>
     </div>
   `;
@@ -2387,8 +2395,18 @@ function initModals() {
       const first_city_name = document.getElementById("newTripCity").value.trim();
       const start_date = document.getElementById("newTripStart").value;
       const end_date = document.getElementById("newTripEnd").value;
-      const hotel_name = document.getElementById("newTripHotel").value.trim();
-      const hotel_address = document.getElementById("newTripHotelAddress")?.value.trim() || hotel_name;
+      let hotel_name = document.getElementById("newTripHotel")?.value.trim() || "";
+      const hotel_address = document.getElementById("newTripHotelAddress")?.value.trim() || "";
+
+      // If user provided an address but no lodging name, default to friendly label
+      if (!hotel_name) {
+        if (hotel_address) {
+          hotel_name = "Friend's Home / Lodging";
+        } else {
+          hotel_name = `${first_city_name} Lodging`;
+        }
+      }
+      const effective_address = hotel_address || hotel_name;
 
       try {
         const res = await fetch("/api/trips", {
@@ -2401,7 +2419,8 @@ function initModals() {
             start_date,
             end_date,
             hotel_name,
-            hotel_address
+            hotel_address: effective_address,
+            address: effective_address
           })
         });
         if (res.ok) {
