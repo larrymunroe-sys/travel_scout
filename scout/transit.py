@@ -117,6 +117,10 @@ def _build_directions_urls(
     }
 
 
+generate_directions_url = _build_directions_urls
+build_directions_urls = _build_directions_urls
+
+
 def _resolve_transit_network(
     city_label: str,
     text_haystack: str,

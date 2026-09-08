@@ -156,3 +156,62 @@ def resolve_city_coordinates(city_name: str, country: Optional[str] = None) -> T
 
     # 3. Default fallback if geocoding is unavailable
     return (0.0, 0.0, country or "")
+
+
+def resolve_venue_coordinates(
+    venue_name: str,
+    city_name: str,
+    country: Optional[str] = None
+) -> Tuple[Optional[float], Optional[float], str]:
+    """
+    Geocode an individual venue, cultural spot, or landmark within a destination city.
+    Returns: (lat, lon, display_address)
+    Falls back gracefully to city coordinates if venue lookup fails.
+    """
+    if not venue_name:
+        city_lat, city_lon, _ = resolve_city_coordinates(city_name, country)
+        return (city_lat if city_lat != 0.0 else None, city_lon if city_lon != 0.0 else None, city_name)
+
+    # Clean venue name (remove trailing site tags like "| Songkick" or "- San Diego")
+    clean_venue = re.split(r"[\s\|\-\—]+(?:San Diego|Events|Tickets|Songkick|DICE|Instagram|Yelp|Calendar)", venue_name, flags=re.IGNORECASE)[0].strip()
+    if not clean_venue:
+        clean_venue = venue_name.strip()
+
+    cache_key = f"venue:{clean_venue.lower()}:{city_name.lower()}"
+    if cache_key in GLOBAL_CITY_COORDINATES:
+        v = GLOBAL_CITY_COORDINATES[cache_key]
+        return (v["lat"], v["lon"], v.get("address", f"{clean_venue}, {city_name}"))
+
+    # Try Nominatim for venue in city
+    try:
+        query = f"{clean_venue}, {city_name}"
+        if country:
+            query = f"{query}, {country}"
+        url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(query)}&format=json&limit=1&addressdetails=1"
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "TravelScoutApp/2.0 (collaborative-travel-planner)"}
+        )
+        with urllib.request.urlopen(req, timeout=3.0) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode("utf-8"))
+                if data and len(data) > 0:
+                    lat = float(data[0]["lat"])
+                    lon = float(data[0]["lon"])
+                    display_name = data[0].get("display_name", f"{clean_venue}, {city_name}")
+                    GLOBAL_CITY_COORDINATES[cache_key] = {
+                        "lat": lat,
+                        "lon": lon,
+                        "address": display_name
+                    }
+                    return (lat, lon, display_name)
+    except Exception as err:
+        print(f"Notice: Venue geocoding for '{clean_venue}' skipped: {err}")
+
+    # Fallback to city coordinates
+    city_lat, city_lon, _ = resolve_city_coordinates(city_name, country)
+    return (
+        city_lat if city_lat != 0.0 else None,
+        city_lon if city_lon != 0.0 else None,
+        f"{clean_venue}, {city_name}"
+    )

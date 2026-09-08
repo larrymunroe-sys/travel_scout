@@ -25,6 +25,36 @@ The scout extracts and categorizes happenings including, but not limited to:
 
 --------------------------------------------------------------------------------
 
+## Subagent Orchestration Architecture (`subagent-orchestrator`)
+
+To maximize throughput without burning LLM/search quotas, the scout employs a **3-Subagent Pipeline**:
+
+```
+┌────────────────────────────────────────────────────────┐
+│            Subagent Orchestrator Coordinator           │
+└──────────────────────────┬─────────────────────────────┘
+                           │
+                           ▼
+        [1] Cultural Event Hunter (Model: Flash)
+            • Concurrently scans press, music, art, and record channels
+            • Extracts titles, snippet highlights, and preliminary venues
+                           │
+                           ▼
+        [2] Venue Geocoder & Transit Enricher (Model: Flash-Lite)
+            • Concurrently geocodes exact addresses & coordinates via Nominatim
+            • Generates Rule-2 compliant Google Maps directions from lodging
+                           │
+                           ▼
+        [3] Itinerary Curator & Ingester (Model: Flash)
+            • Normalizes & deduplicates against existing trip items
+            • Binds items to trip's city_segment_id with assigned_date="todo"
+```
+
+- **Quota Strategy**: Zero Opus / Zero Sonnet. All subagents operate on high-speed, cost-effective Flash models.
+- **Concurrency**: Event category scans and venue geocoding queries run in parallel worker pools.
+
+--------------------------------------------------------------------------------
+
 ## Multi-Step Execution Procedure
 
 ### Step 1: Identify Destination Cities on the Itinerary

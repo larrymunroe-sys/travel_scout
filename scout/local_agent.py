@@ -7,11 +7,13 @@ and ingests them directly into the Explore & Discover wishlist of Travel Scout.
 """
 from datetime import datetime
 from typing import List, Dict, Any, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from sqlalchemy.orm import Session
 
 from database.models import CitySegment, ItineraryItem
 from scout.web_search import live_city_search
-from scout.geocoding import resolve_city_coordinates
+from scout.geocoding import resolve_city_coordinates, resolve_venue_coordinates
+from scout.transit import generate_directions_url
 
 # Well-known local media & cultural publications for major destinations
 KNOWN_LOCAL_PUBLICATIONS: Dict[str, List[Dict[str, str]]] = {
@@ -185,31 +187,35 @@ def discover_city_publications(city_name: str, country: Optional[str] = None) ->
     return results
 
 
-def scout_local_events_for_city(
+# ==============================================================================
+# QUOTA-AWARE MULTI-SUBAGENT PIPELINE (subagent-orchestrator pattern)
+# ==============================================================================
+
+def hunt_cultural_events(
     city_name: str,
     country: Optional[str] = None,
     event_types: Optional[List[str]] = None,
-    max_per_type: int = 3
+    max_per_type: int = 3,
+    max_workers: int = 4
 ) -> List[Dict[str, Any]]:
     """
-    Scout local publications, event directories, and websites for a specific city.
+    Subagent 1: Cultural Event Hunter (Model: Gemini Flash)
     
-    Returns structured event discoveries ready for Explore & Discover.
+    Parallelizes category scans across local event channels and queries.
+    Deduplicates candidates and normalizes titles.
     """
     types_to_scan = event_types or list(EVENT_SCAN_QUERIES.keys())
     discovered: List[Dict[str, Any]] = []
     seen_titles = set()
 
-    for event_type in types_to_scan:
-        config = EVENT_SCAN_QUERIES.get(event_type)
-        if not config:
-            continue
-
-        cat = config["category"]
-        channel = config["channel"]
-        queries = config["queries"]
-
-        # Take the top query for this category
+    def _scan_category(cat_key: str) -> List[Dict[str, Any]]:
+        cfg = EVENT_SCAN_QUERIES.get(cat_key)
+        if not cfg:
+            return []
+        cat = cfg["category"]
+        channel = cfg["channel"]
+        queries = cfg["queries"]
+        cat_hits: List[Dict[str, Any]] = []
         for q in queries[:2]:
             try:
                 hits = live_city_search(
@@ -223,69 +229,95 @@ def scout_local_events_for_city(
                     title = (h.get("title") or "").strip()
                     if not title:
                         continue
-                    title_norm = title.lower()
-                    if title_norm not in seen_titles:
-                        seen_titles.add(title_norm)
-                        # Ensure category matches our focused event type
-                        h["title"] = title
-                        h["category"] = cat
-                        if event_type == "free":
-                            h["is_free"] = True
-                            h["cost"] = "Free Admission"
-                        discovered.append(h)
+                    h["title"] = title
+                    h["category"] = cat
+                    if cat_key == "free":
+                        h["is_free"] = True
+                        h["cost"] = "Free Admission"
+                    cat_hits.append(h)
             except Exception as err:
-                print(f"Notice: Local scout failed for {city_name} on {event_type} ('{q}'): {err}")
+                print(f"Notice: Hunter failed for {city_name} on {cat_key} ('{q}'): {err}")
+        return cat_hits
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(_scan_category, t): t for t in types_to_scan}
+        for future in as_completed(futures):
+            try:
+                res = future.result()
+                for h in res:
+                    norm = h["title"].lower()
+                    if norm not in seen_titles:
+                        seen_titles.add(norm)
+                        discovered.append(h)
+            except Exception as e:
+                print(f"Notice: Hunter category error: {e}")
 
     return discovered
 
 
-def run_local_agent_for_city_segment(
+def enrich_venue_locations(
+    events: List[Dict[str, Any]],
+    city_name: str,
+    country: Optional[str] = None,
+    stay: Optional[Any] = None,
+    max_workers: int = 4
+) -> List[Dict[str, Any]]:
+    """
+    Subagent 2: Venue Geocoder & Transit Enricher (Model: Gemini Flash-Lite / Flash)
+    
+    Concurrently geocodes venues and landmarks, extracts street addresses, and
+    generates compliant Google Maps directions links with lodging as the starting origin (Rule 2).
+    """
+    if not events:
+        return []
+
+    def _enrich_single(ev: Dict[str, Any]) -> Dict[str, Any]:
+        venue_name = ev.get("title", "")
+        # Resolve coordinates & address
+        lat, lon, address = resolve_venue_coordinates(venue_name, city_name, country)
+        ev["lat"] = lat
+        ev["lon"] = lon
+        ev["address"] = address
+        ev["neighborhood"] = ev.get("neighborhood") or f"{city_name} Cultural District"
+
+        # Generate Rule-2 compliant Google Maps directions
+        dir_links = generate_directions_url(
+            stay=stay,
+            city_name=city_name,
+            venue_lat=lat,
+            venue_lon=lon,
+            venue_title=venue_name,
+            venue_address=address
+        )
+        ev["directions_url"] = dir_links["transit_url"]
+        ev["walking_url"] = dir_links["walking_url"]
+        return ev
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        enriched = list(executor.map(_enrich_single, events))
+
+    return enriched
+
+
+def curate_and_ingest_events(
     db: Session,
     trip_id: str,
-    city_id: str,
+    city_segment_id: str,
     user_id: str,
-    event_types: Optional[List[str]] = None,
-    max_per_type: int = 3
-) -> Dict[str, Any]:
+    events: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
     """
-    Autonomous execution of the Local City Cultural Scout Agent.
+    Subagent 3: Itinerary Curator & Ingester (Model: Gemini Flash)
     
-    1. Identifies city name & country from city segment.
-    2. Discovers local publications and alt-weeklies.
-    3. Runs event searches across chosen event types (movies, concerts, art exhibits,
-       restaurants, free events, record stores, outdoor festivals, farmers markets, street fairs).
-    4. Automatically saves discovered items to ItineraryItem with assigned_date='todo'.
-    5. Returns summary and items.
+    Validates, deduplicates against database items, and commits new discoveries
+    into ItineraryItem with assigned_date='todo'.
     """
-    city_seg = db.query(CitySegment).filter(
-        CitySegment.id == city_id,
-        CitySegment.trip_id == trip_id
-    ).first()
-
-    if not city_seg:
-        return {"error": "City segment not found in trip", "newly_discovered": 0, "items": []}
-
-    city_name = city_seg.city_name
-    country = city_seg.country
-
-    # 1. Discover publications
-    publications = discover_city_publications(city_name, country)
-
-    # 2. Scout events
-    events = scout_local_events_for_city(
-        city_name=city_name,
-        country=country,
-        event_types=event_types,
-        max_per_type=max_per_type
-    )
-
-    # 3. Ingest into database
     new_items: List[Dict[str, Any]] = []
     for ev in events:
         ev_title = (ev.get("title") or "").strip()
         if not ev_title:
             continue
-        # Check if already in DB
+
         exists = db.query(ItineraryItem).filter(
             ItineraryItem.trip_id == trip_id,
             ItineraryItem.title == ev_title
@@ -294,11 +326,11 @@ def run_local_agent_for_city_segment(
         if not exists:
             item = ItineraryItem(
                 trip_id=trip_id,
-                city_segment_id=city_seg.id,
+                city_segment_id=city_segment_id,
                 title=ev_title,
                 category=ev.get("category", "gems"),
-                neighborhood=ev.get("neighborhood", f"{city_name} Cultural District"),
-                address=ev.get("address", city_name),
+                neighborhood=ev.get("neighborhood", "Cultural District"),
+                address=ev.get("address", ""),
                 lat=ev.get("lat"),
                 lon=ev.get("lon"),
                 cost=ev.get("cost", "Free Admission" if ev.get("is_free") else "Check venue"),
@@ -314,7 +346,99 @@ def run_local_agent_for_city_segment(
             db.add(item)
             new_items.append(ev)
 
-    db.commit()
+    if new_items:
+        db.commit()
+
+    return new_items
+
+
+def scout_local_events_for_city(
+    city_name: str,
+    country: Optional[str] = None,
+    event_types: Optional[List[str]] = None,
+    max_per_type: int = 3,
+    enrich_locations: bool = True
+) -> List[Dict[str, Any]]:
+    """
+    Scout local publications, event directories, and websites for a specific city.
+    Orchestrates the Cultural Hunter and Venue Geocoder subagents.
+    """
+    # 1. Hunter Agent
+    raw_events = hunt_cultural_events(
+        city_name=city_name,
+        country=country,
+        event_types=event_types,
+        max_per_type=max_per_type
+    )
+
+    # 2. Enricher Agent
+    if enrich_locations:
+        return enrich_venue_locations(
+            events=raw_events,
+            city_name=city_name,
+            country=country
+        )
+    return raw_events
+
+
+def run_local_agent_for_city_segment(
+    db: Session,
+    trip_id: str,
+    city_id: str,
+    user_id: str,
+    event_types: Optional[List[str]] = None,
+    max_per_type: int = 3,
+    enrich_locations: bool = True
+) -> Dict[str, Any]:
+    """
+    Autonomous execution of the Local City Cultural Scout Agent via
+    the 3-Subagent Orchestrator pipeline.
+    
+    1. Identifies city name & country from city segment.
+    2. Discovers local publications and alt-weeklies.
+    3. Subagent 1 (Hunter): Runs parallel event searches across chosen categories.
+    4. Subagent 2 (Enricher): Geocodes venues & builds Rule-2 compliant transit routes.
+    5. Subagent 3 (Curator): Deduplicates and ingests into ItineraryItem with assigned_date='todo'.
+    """
+    city_seg = db.query(CitySegment).filter(
+        CitySegment.id == city_id,
+        CitySegment.trip_id == trip_id
+    ).first()
+
+    if not city_seg:
+        return {"error": "City segment not found in trip", "newly_discovered": 0, "items": []}
+
+    city_name = city_seg.city_name
+    country = city_seg.country
+    active_stay = city_seg.stays[0] if (city_seg.stays and len(city_seg.stays) > 0) else None
+
+    # Step 1: Discover publications
+    publications = discover_city_publications(city_name, country)
+
+    # Subagent 1: Hunt cultural events in parallel
+    raw_events = hunt_cultural_events(
+        city_name=city_name,
+        country=country,
+        event_types=event_types,
+        max_per_type=max_per_type
+    )
+
+    # Subagent 2: Enrich venue locations & transit directions
+    enriched_events = enrich_venue_locations(
+        events=raw_events,
+        city_name=city_name,
+        country=country,
+        stay=active_stay
+    ) if enrich_locations else raw_events
+
+    # Subagent 3: Curate & Ingest into database
+    new_items = curate_and_ingest_events(
+        db=db,
+        trip_id=trip_id,
+        city_segment_id=city_seg.id,
+        user_id=user_id,
+        events=enriched_events
+    )
 
     return {
         "city_name": city_name,
