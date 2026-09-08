@@ -15,6 +15,19 @@ let exploreSchedule = "all";
 let exploreFreeOnly = false;
 let exploreDebounceTimer = null;
 
+// Global Auth Headers Helper
+function getAuthHeaders(extra = {}) {
+  const sessionToken = localStorage.getItem("travel_scout_session");
+  const localUserId = localStorage.getItem("travel_scout_user_id");
+  const headers = { ...extra };
+  if (sessionToken) {
+    headers["x-travel-scout-session"] = sessionToken;
+  } else if (localUserId) {
+    headers["x-travel-scout-user-id"] = localUserId;
+  }
+  return headers;
+}
+
 // Global Sign In Modal Controls
 window.openLogin = function() {
   const modal = document.getElementById("loginModal");
@@ -30,7 +43,237 @@ window.closeLogin = function() {
   if (modal) modal.style.display = "none";
 };
 
-document.addEventListener("DOMContentLoaded", async () => {
+// Global Create Trip Modal Controls
+window.openCreateTripModal = async function() {
+  if (!currentUser) {
+    const sessionToken = localStorage.getItem("travel_scout_session");
+    const localUserId = localStorage.getItem("travel_scout_user_id");
+    if (sessionToken || localUserId) {
+      try { await loadCurrentUser(); } catch (e) {}
+    }
+  }
+  if (!currentUser) {
+    alert("🔒 Please sign in with your Google or Gmail account before creating a new itinerary.");
+    if (window.openLogin) window.openLogin();
+    return;
+  }
+  const modal = document.getElementById("createTripModal");
+  if (modal) {
+    modal.style.display = "flex";
+    const titleInput = document.getElementById("newTripTitle");
+    if (titleInput) setTimeout(() => titleInput.focus(), 80);
+  }
+};
+
+window.closeCreateTripModal = function() {
+  const modal = document.getElementById("createTripModal");
+  if (modal) modal.style.display = "none";
+};
+
+// Global Edit Trip Modal Controls
+window.openEditTripModal = async function() {
+  if (!currentUser) {
+    const sessionToken = localStorage.getItem("travel_scout_session");
+    const localUserId = localStorage.getItem("travel_scout_user_id");
+    if (sessionToken || localUserId) {
+      try { await loadCurrentUser(); } catch (e) {}
+    }
+  }
+  if (!currentUser) {
+    alert("🔒 Please sign in with your Google or Gmail account before customizing itineraries.");
+    if (window.openLogin) window.openLogin();
+    return;
+  }
+  if (!currentTripId) {
+    alert("You do not have an active itinerary selected to customize. Let's create your first itinerary!");
+    window.openCreateTripModal();
+    return;
+  }
+  if (!currentTripData || !currentTripData.trip) {
+    try { await refreshTrip(); } catch (e) {}
+  }
+  if (!currentTripData || !currentTripData.trip) {
+    alert("Unable to load itinerary details to customize. Please try again.");
+    return;
+  }
+  const titleInput = document.getElementById("editTripTitleInput");
+  const descInput = document.getElementById("editTripDescInput");
+  if (titleInput && currentTripData.trip) {
+    titleInput.value = currentTripData.trip.title || "";
+  }
+  if (descInput && currentTripData.trip) {
+    descInput.value = currentTripData.trip.description || "";
+  }
+  const modal = document.getElementById("editTripModal");
+  if (modal) modal.style.display = "flex";
+};
+
+window.closeEditTripModal = function() {
+  const modal = document.getElementById("editTripModal");
+  if (modal) modal.style.display = "none";
+};
+
+// Global Delete Trip Handler
+window.deleteCurrentTrip = async function() {
+  if (!currentUser) {
+    alert("🔒 Please sign in with your Google or Gmail account.");
+    if (window.openLogin) window.openLogin();
+    return;
+  }
+  if (!currentTripId || !currentTripData || !currentTripData.trip) {
+    alert("No active itinerary selected to delete.");
+    return;
+  }
+  const tripTitle = currentTripData.trip.title || "this itinerary";
+  if (!confirm(`⚠️ Are you sure you want to permanently delete "${tripTitle}"?\n\nThis will remove all cities, accommodations, notes, and scheduled stops in this trip. This action cannot be undone.`)) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/trips/${currentTripId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+      credentials: "include"
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const modal = document.getElementById("editTripModal");
+      if (modal) modal.style.display = "none";
+      alert(`"${tripTitle}" has been permanently deleted.`);
+      currentTripId = data.next_trip_id || null;
+      window.location.reload();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      alert("Failed to delete trip: " + (err.detail || res.statusText));
+    }
+  } catch (err) {
+    alert("Error deleting trip: " + err.message);
+  }
+};
+
+// Global Submit Handlers for Create & Edit Trip Forms
+window.submitCreateTrip = async function(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  if (!currentUser) {
+    const sessionToken = localStorage.getItem("travel_scout_session");
+    const localUserId = localStorage.getItem("travel_scout_user_id");
+    if (sessionToken || localUserId) {
+      try { await loadCurrentUser(); } catch (err) {}
+    }
+  }
+  if (!currentUser) {
+    alert("🔒 Please sign in with your Google or Gmail account before creating a new itinerary.");
+    if (window.openLogin) window.openLogin();
+    return false;
+  }
+
+  const title = document.getElementById("newTripTitle")?.value.trim();
+  const first_city_name = document.getElementById("newTripCity")?.value.trim();
+  const start_date = document.getElementById("newTripStart")?.value;
+  const end_date = document.getElementById("newTripEnd")?.value;
+  let hotel_name = document.getElementById("newTripHotel")?.value.trim() || "";
+  const hotel_address = document.getElementById("newTripHotelAddress")?.value.trim() || "";
+
+  if (!title || !first_city_name || !start_date || !end_date) {
+    alert("Please fill in all required fields (Itinerary Name, First Destination City, Start Date, End Date).");
+    return false;
+  }
+
+  // If user provided an address but no lodging name, default to friendly label
+  if (!hotel_name) {
+    if (hotel_address) {
+      hotel_name = "Friend's Home / Lodging";
+    } else {
+      hotel_name = `${first_city_name} Lodging`;
+    }
+  }
+  const effective_address = hotel_address || hotel_name;
+
+  try {
+    const res = await fetch("/api/trips", {
+      method: "POST",
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
+      credentials: "include",
+      body: JSON.stringify({
+        title,
+        first_city_name,
+        start_date,
+        end_date,
+        hotel_name,
+        hotel_address: effective_address,
+        address: effective_address
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const modal = document.getElementById("createTripModal");
+      if (modal) modal.style.display = "none";
+      const form = document.getElementById("createTripForm");
+      currentTripId = data.trip_id;
+      window.currentTripId = currentTripId;
+      await loadTripsDropdown();
+      await refreshTrip();
+      return data;
+    } else {
+      const err = await res.json().catch(() => ({}));
+      alert("Failed to create new trip: " + (err.detail || res.statusText));
+    }
+  } catch (err) {
+    alert("Error creating trip: " + err.message);
+  }
+  return false;
+};
+
+window.submitEditTrip = async function(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  if (!currentUser) {
+    alert("🔒 Please sign in with your Google or Gmail account before customizing itineraries.");
+    if (window.openLogin) window.openLogin();
+    return false;
+  }
+  if (!currentTripId) {
+    alert("No active trip selected to customize.");
+    return false;
+  }
+  const title = document.getElementById("editTripTitleInput")?.value.trim();
+  const description = document.getElementById("editTripDescInput")?.value.trim();
+  if (!title) {
+    alert("Please provide a title for the trip.");
+    return false;
+  }
+  try {
+    const res = await fetch(`/api/trips/${currentTripId}`, {
+      method: "PUT",
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
+      credentials: "include",
+      body: JSON.stringify({ title, description })
+    });
+    if (res.ok) {
+      const modal = document.getElementById("editTripModal");
+      if (modal) modal.style.display = "none";
+      await loadTripsDropdown();
+      await refreshTrip();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      alert("Failed to update trip details: " + (err.detail || res.statusText));
+    }
+  } catch (err) {
+    alert("Error updating trip: " + err.message);
+  }
+  return false;
+};
+
+// Global Help Modal Controls
+window.openHelpModal = function() {
+  const modal = document.getElementById("helpModal");
+  if (modal) modal.style.display = "flex";
+};
+window.closeHelpModal = function() {
+  const modal = document.getElementById("helpModal");
+  if (modal) modal.style.display = "none";
+};
+
+// Application Initialization (Safe against readyState race conditions)
+async function initApp() {
   // Check for Google OAuth callback parameters in URL
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get("google_auth") === "success") {
@@ -62,17 +305,23 @@ document.addEventListener("DOMContentLoaded", async () => {
       .catch(err => console.log("Service Worker registration skipped:", err));
   }
 
-  initTabs();
-  initModals();
-  initAddItemModal();
-  initExpenseTracker();
-  initBookingModal();
-  initCalendarExport();
-  initExploreFilters();
-  await loadCurrentUser();
-  await loadInitialTrip();
-  initScout();
-});
+  try { initTabs(); } catch (e) { console.error("initTabs error:", e); }
+  try { initModals(); } catch (e) { console.error("initModals error:", e); }
+  try { initAddItemModal(); } catch (e) { console.error("initAddItemModal error:", e); }
+  try { initExpenseTracker(); } catch (e) { console.error("initExpenseTracker error:", e); }
+  try { initBookingModal(); } catch (e) { console.error("initBookingModal error:", e); }
+  try { initCalendarExport(); } catch (e) { console.error("initCalendarExport error:", e); }
+  try { initExploreFilters(); } catch (e) { console.error("initExploreFilters error:", e); }
+  try { await loadCurrentUser(); } catch (e) { console.error("loadCurrentUser error:", e); }
+  try { await loadInitialTrip(); } catch (e) { console.error("loadInitialTrip error:", e); }
+  try { initScout(); } catch (e) { console.error("initScout error:", e); }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initApp);
+} else {
+  initApp();
+}
 
 // 1. Navigation Tabs
 function initTabs() {
@@ -128,6 +377,7 @@ async function loadCurrentUser() {
     const res = await fetch("/auth/me", { headers, credentials: "include" });
     const data = await res.json();
     currentUser = data.current_user;
+    window.currentUser = currentUser;
 
     const avatarEl = document.getElementById("currentUserAvatar");
     const nameEl = document.getElementById("currentUserName");
@@ -288,29 +538,19 @@ async function loadCurrentUser() {
 }
 
 // User Management Modal Handlers
-function getAuthHeaders(extra = {}) {
-  const sessionToken = localStorage.getItem("travel_scout_session");
-  const localUserId = localStorage.getItem("travel_scout_user_id");
-  const headers = { ...extra };
-  if (sessionToken) {
-    headers["x-travel-scout-session"] = sessionToken;
-  } else if (localUserId) {
-    headers["x-travel-scout-user-id"] = localUserId;
-  }
-  return headers;
-}
-
-async function openManageUsersModal() {
+window.openManageUsersModal = async function() {
   const modal = document.getElementById("manageUsersModal");
   if (!modal) return;
   modal.style.display = "flex";
   await loadManageUsers();
-}
+};
+const openManageUsersModal = window.openManageUsersModal;
 
-function closeManageUsersModal() {
+window.closeManageUsersModal = function() {
   const modal = document.getElementById("manageUsersModal");
   if (modal) modal.style.display = "none";
-}
+};
+const closeManageUsersModal = window.closeManageUsersModal;
 
 async function loadManageUsers() {
   const listEl = document.getElementById("manageUsersList");
@@ -515,11 +755,14 @@ async function loadInitialTrip() {
       if (!currentTripId || !trips.find(t => t.id === currentTripId)) {
         currentTripId = trips[0].id;
       }
+      window.currentTripId = currentTripId;
       await loadTripsDropdown();
       await refreshTrip();
     } else {
       currentTripId = null;
       currentTripData = null;
+      window.currentTripId = null;
+      window.currentTripData = null;
       const switcher = document.getElementById("tripSwitcherSelect");
       if (switcher) switcher.innerHTML = `<option value="">No Itineraries</option>`;
       const sub = document.getElementById("tripSubtitle");
@@ -571,12 +814,11 @@ async function loadInitialTrip() {
 async function refreshTrip() {
   if (!currentTripId) return;
   try {
-    const localUserId = localStorage.getItem("travel_scout_user_id");
-    const headers = {};
-    if (localUserId) headers["x-travel-scout-user-id"] = localUserId;
-
+    const headers = getAuthHeaders();
     const res = await fetch(`/api/trips/${currentTripId}`, { headers, credentials: "include" });
     currentTripData = await res.json();
+    window.currentTripData = currentTripData;
+    window.currentTripId = currentTripId;
 
     if (currentTripData.trip) {
       const sub = document.getElementById("tripSubtitle");
@@ -2306,80 +2548,22 @@ function initModals() {
   const editTripForm = document.getElementById("editTripForm");
 
   if (openEditTripBtn) {
-    openEditTripBtn.addEventListener("click", () => {
-      if (currentTripData && currentTripData.trip) {
-        document.getElementById("editTripTitleInput").value = currentTripData.trip.title || "";
-        document.getElementById("editTripDescInput").value = currentTripData.trip.description || "";
-      }
-      editTripModal.style.display = "flex";
-    });
+    openEditTripBtn.addEventListener("click", () => window.openEditTripModal());
   }
-  if (closeEditTripBtn) closeEditTripBtn.addEventListener("click", () => editTripModal.style.display = "none");
-  if (cancelEditTripBtn) cancelEditTripBtn.addEventListener("click", () => editTripModal.style.display = "none");
-
+  if (closeEditTripBtn) closeEditTripBtn.addEventListener("click", () => window.closeEditTripModal());
+  if (cancelEditTripBtn) cancelEditTripBtn.addEventListener("click", () => window.closeEditTripModal());
   if (editTripForm) {
-    editTripForm.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const title = document.getElementById("editTripTitleInput").value.trim();
-      const description = document.getElementById("editTripDescInput").value.trim();
-      try {
-        const res = await fetch(`/api/trips/${currentTripId}`, {
-          method: "PUT",
-          headers: getAuthHeaders({ "Content-Type": "application/json" }),
-          credentials: "include",
-          body: JSON.stringify({ title, description })
-        });
-        if (res.ok) {
-          editTripModal.style.display = "none";
-          await loadTripsDropdown();
-          await refreshTrip();
-        } else {
-          const err = await res.json().catch(() => ({}));
-          alert("Failed to update trip details: " + (err.detail || res.statusText));
-        }
-      } catch (err) {
-        alert("Error updating trip: " + err.message);
-      }
-    });
+    editTripForm.addEventListener("submit", (e) => window.submitEditTrip(e));
   }
 
   const deleteTripBtn = document.getElementById("deleteTripBtn");
   if (deleteTripBtn) {
-    deleteTripBtn.addEventListener("click", async () => {
-      if (!currentTripId || !currentTripData || !currentTripData.trip) return;
-      const tripTitle = currentTripData.trip.title || "this itinerary";
-      if (!confirm(`⚠️ Are you sure you want to permanently delete "${tripTitle}"?\n\nThis will remove all cities, accommodations, notes, and scheduled stops in this trip. This action cannot be undone.`)) {
-        return;
-      }
-      try {
-        const res = await fetch(`/api/trips/${currentTripId}`, {
-          method: "DELETE",
-          headers: getAuthHeaders(),
-          credentials: "include"
-        });
-        if (res.ok) {
-          const data = await res.json();
-          editTripModal.style.display = "none";
-          alert(`"${tripTitle}" has been permanently deleted.`);
-          currentTripId = data.next_trip_id || null;
-          window.location.reload();
-        } else {
-          const err = await res.json().catch(() => ({}));
-          alert("Failed to delete trip: " + (err.detail || res.statusText));
-        }
-      } catch (err) {
-        alert("Error deleting trip: " + err.message);
-      }
-    });
+    deleteTripBtn.addEventListener("click", () => window.deleteCurrentTrip());
   }
 
   const headerDeleteTripBtn = document.getElementById("headerDeleteTripBtn");
   if (headerDeleteTripBtn) {
-    headerDeleteTripBtn.addEventListener("click", () => {
-      if (deleteTripBtn) {
-        deleteTripBtn.click();
-      }
-    });
+    headerDeleteTripBtn.addEventListener("click", () => window.deleteCurrentTrip());
   }
 
   // Create Trip Modal
@@ -2389,60 +2573,11 @@ function initModals() {
   const cancelCreateTripBtn = document.getElementById("cancelCreateTripBtn");
   const createTripForm = document.getElementById("createTripForm");
 
-  if (openCreateTripBtn) openCreateTripBtn.addEventListener("click", () => createTripModal.style.display = "flex");
-  if (closeCreateTripBtn) closeCreateTripBtn.addEventListener("click", () => createTripModal.style.display = "none");
-  if (cancelCreateTripBtn) cancelCreateTripBtn.addEventListener("click", () => createTripModal.style.display = "none");
-
+  if (openCreateTripBtn) openCreateTripBtn.addEventListener("click", () => window.openCreateTripModal());
+  if (closeCreateTripBtn) closeCreateTripBtn.addEventListener("click", () => window.closeCreateTripModal());
+  if (cancelCreateTripBtn) cancelCreateTripBtn.addEventListener("click", () => window.closeCreateTripModal());
   if (createTripForm) {
-    createTripForm.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const title = document.getElementById("newTripTitle").value.trim();
-      const first_city_name = document.getElementById("newTripCity").value.trim();
-      const start_date = document.getElementById("newTripStart").value;
-      const end_date = document.getElementById("newTripEnd").value;
-      let hotel_name = document.getElementById("newTripHotel")?.value.trim() || "";
-      const hotel_address = document.getElementById("newTripHotelAddress")?.value.trim() || "";
-
-      // If user provided an address but no lodging name, default to friendly label
-      if (!hotel_name) {
-        if (hotel_address) {
-          hotel_name = "Friend's Home / Lodging";
-        } else {
-          hotel_name = `${first_city_name} Lodging`;
-        }
-      }
-      const effective_address = hotel_address || hotel_name;
-
-      try {
-        const res = await fetch("/api/trips", {
-          method: "POST",
-          headers: getAuthHeaders({ "Content-Type": "application/json" }),
-          credentials: "include",
-          body: JSON.stringify({
-            title,
-            first_city_name,
-            start_date,
-            end_date,
-            hotel_name,
-            hotel_address: effective_address,
-            address: effective_address
-          })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          createTripModal.style.display = "none";
-          createTripForm.reset();
-          currentTripId = data.trip_id;
-          await loadTripsDropdown();
-          await refreshTrip();
-        } else {
-          const err = await res.json().catch(() => ({}));
-          alert("Failed to create new trip: " + (err.detail || res.statusText));
-        }
-      } catch (err) {
-        alert("Error creating trip: " + err.message);
-      }
-    });
+    createTripForm.addEventListener("submit", (e) => window.submitCreateTrip(e));
   }
 
   // Help Guide Modal

@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "created_at": "2026-09-08T17:18:03.051665",
-  "total_trips": 11,
+  "created_at": "2026-09-08T17:43:05.871799",
+  "total_trips": 14,
   "trips": [
     {
       "id": "5d8976cf-9c0a-4bf5-9a24-f3892adacc3b",
@@ -3218,6 +3218,132 @@
               "lat": 32.748569,
               "lon": -117.130242,
               "notes": "Primary accommodation for San Diego."
+            }
+          ]
+        }
+      ],
+      "items": [],
+      "deleted_items": [],
+      "expenses": []
+    },
+    {
+      "id": "0c7b1fe7-cad3-4868-86f1-8c52651e4d36",
+      "title": "Test New Trip From UI",
+      "description": "Custom itinerary designed by Larry Munroe",
+      "owner_id": "fd803d0e-bfa5-4205-82f4-9f88e28e0f3e",
+      "created_at": "2026-09-08T17:35:38.860415",
+      "collaborators": [
+        {
+          "user_id": "fd803d0e-bfa5-4205-82f4-9f88e28e0f3e",
+          "role": "owner",
+          "email": "larry.munroe@gmail.com",
+          "name": "Larry Munroe"
+        }
+      ],
+      "city_segments": [
+        {
+          "id": "d2f972be-559e-4afb-be85-6f93022c638e",
+          "city_name": "Seattle",
+          "country": "United States",
+          "start_date": "2026-10-01",
+          "end_date": "2026-10-05",
+          "order_index": 1,
+          "lat": 47.6062,
+          "lon": -122.3321,
+          "stays": [
+            {
+              "id": "336b4c62-0803-46f3-9936-b0c28694ed37",
+              "name": "The Edgewater",
+              "address": "2411 Alaskan Way, Seattle, WA",
+              "start_date": "2026-10-01",
+              "end_date": "2026-10-05",
+              "lat": 47.6125416,
+              "lon": -122.3528448,
+              "notes": "Primary accommodation for Seattle."
+            }
+          ]
+        }
+      ],
+      "items": [],
+      "deleted_items": [],
+      "expenses": []
+    },
+    {
+      "id": "8062ab30-977f-4557-9b67-886dead75722",
+      "title": "Test Trip Created 1788889293",
+      "description": "Custom itinerary designed by Larry Munroe",
+      "owner_id": "fd803d0e-bfa5-4205-82f4-9f88e28e0f3e",
+      "created_at": "2026-09-08T17:41:33.809010",
+      "collaborators": [
+        {
+          "user_id": "fd803d0e-bfa5-4205-82f4-9f88e28e0f3e",
+          "role": "owner",
+          "email": "larry.munroe@gmail.com",
+          "name": "Larry Munroe"
+        }
+      ],
+      "city_segments": [
+        {
+          "id": "0ad60a5d-6a33-45d2-b791-3409232b68b2",
+          "city_name": "Portland",
+          "country": "",
+          "start_date": "2026-11-01",
+          "end_date": "2026-11-05",
+          "order_index": 1,
+          "lat": 45.5202471,
+          "lon": -122.674194,
+          "stays": [
+            {
+              "id": "6c9376d9-22ef-45c7-9fca-f194ceb23f08",
+              "name": "Ace Hotel",
+              "address": "1022 SW Harvey Milk St, Portland, OR",
+              "start_date": "2026-11-01",
+              "end_date": "2026-11-05",
+              "lat": 45.5220125,
+              "lon": -122.681616,
+              "notes": "Primary accommodation for Portland."
+            }
+          ]
+        }
+      ],
+      "items": [],
+      "deleted_items": [],
+      "expenses": []
+    },
+    {
+      "id": "03b39fa0-07ac-4c4a-80f1-8dd9977fe173",
+      "title": "Test Trip Created 1788889383 - Updated",
+      "description": "Exploring coffee, food, and indie bookstores",
+      "owner_id": "fd803d0e-bfa5-4205-82f4-9f88e28e0f3e",
+      "created_at": "2026-09-08T17:43:03.191635",
+      "collaborators": [
+        {
+          "user_id": "fd803d0e-bfa5-4205-82f4-9f88e28e0f3e",
+          "role": "owner",
+          "email": "larry.munroe@gmail.com",
+          "name": "Larry Munroe"
+        }
+      ],
+      "city_segments": [
+        {
+          "id": "5dbc476d-2eda-46be-9867-4798721a30fd",
+          "city_name": "Portland",
+          "country": "",
+          "start_date": "2026-11-01",
+          "end_date": "2026-11-05",
+          "order_index": 1,
+          "lat": 45.5202471,
+          "lon": -122.674194,
+          "stays": [
+            {
+              "id": "2470da83-bdf9-4950-a768-0d319992c52a",
+              "name": "Ace Hotel",
+              "address": "1022 SW Harvey Milk St, Portland, OR",
+              "start_date": "2026-11-01",
+              "end_date": "2026-11-05",
+              "lat": 45.5220125,
+              "lon": -122.681616,
+              "notes": "Primary accommodation for Portland."
             }
           ]
         }

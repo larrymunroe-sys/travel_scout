@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="/static/styles.css?v=3.6" />
+  <link rel="stylesheet" href="/static/styles.css?v=3.7" />
   <link rel="manifest" href="/static/manifest.json" />
   <meta name="theme-color" content="#0284c7" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -25,9 +25,9 @@
         <div>
           <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
             <h1 class="logo-title">Travel Scout</h1>
-            <button id="openEditTripBtn" class="btn btn-secondary btn-sm" style="padding:0.2rem 0.55rem; font-size:0.75rem;" title="Rename journey or edit description">✏️ Customize</button>
-            <button id="openCreateTripBtn" class="btn btn-secondary btn-sm" style="padding:0.2rem 0.55rem; font-size:0.75rem; font-weight:600;" title="Create a fresh itinerary from scratch">➕ New Itinerary</button>
-            <button id="headerDeleteTripBtn" class="btn btn-secondary btn-sm" style="padding:0.2rem 0.55rem; font-size:0.75rem; background:rgba(244,63,94,0.15); color:#fca5a5; border:1px solid rgba(244,63,94,0.4); cursor:pointer;" title="Permanently delete this entire itinerary">🗑️ Delete</button>
+            <button id="openEditTripBtn" type="button" class="btn btn-secondary btn-sm" onclick="window.openEditTripModal ? window.openEditTripModal() : (document.getElementById('editTripModal').style.display='flex')" style="padding:0.2rem 0.55rem; font-size:0.75rem;" title="Rename journey or edit description">✏️ Customize</button>
+            <button id="openCreateTripBtn" type="button" class="btn btn-secondary btn-sm" onclick="window.openCreateTripModal ? window.openCreateTripModal() : (document.getElementById('createTripModal').style.display='flex')" style="padding:0.2rem 0.55rem; font-size:0.75rem; font-weight:600;" title="Create a fresh itinerary from scratch">➕ New Itinerary</button>
+            <button id="headerDeleteTripBtn" type="button" class="btn btn-secondary btn-sm" onclick="window.deleteCurrentTrip ? window.deleteCurrentTrip() : false" style="padding:0.2rem 0.55rem; font-size:0.75rem; background:rgba(244,63,94,0.15); color:#fca5a5; border:1px solid rgba(244,63,94,0.4); cursor:pointer;" title="Permanently delete this entire itinerary">🗑️ Delete</button>
             <select id="tripSwitcherSelect" class="user-switcher" style="padding:0.25rem 0.5rem; font-size:0.75rem; border-radius:6px; background:rgba(255,255,255,0.06); border:1px solid var(--border); color:var(--text-main);" title="Switch between saved itineraries"></select>
           </div>
           <p class="logo-subtitle" id="tripSubtitle">Collaborative Multi-City Travel Planner</p>
@@ -45,19 +45,19 @@
           ➕ Add Custom Item
         </button>
 
-        <button id="openPrintHeaderBtn" class="btn btn-secondary btn-sm" title="Print itinerary, save PDF, or send by email/text">
+        <button id="openPrintHeaderBtn" type="button" class="btn btn-secondary btn-sm" onclick="window.openPrintModal ? window.openPrintModal() : (document.getElementById('printModal').style.display='flex')" title="Print itinerary, save PDF, or send by email/text">
           🖨️ Print / Export
         </button>
 
-        <button id="openHelpBtn" class="btn btn-secondary btn-sm" title="Open Help & How-To Manual">
+        <button id="openHelpBtn" type="button" class="btn btn-secondary btn-sm" onclick="window.openHelpModal ? window.openHelpModal() : (document.getElementById('helpModal').style.display='flex')" title="Open Help & How-To Manual">
           ❓ Help Guide
         </button>
 
-        <button id="openInviteBtn" class="btn btn-secondary btn-sm">
+        <button id="openInviteBtn" type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('inviteModal').style.display='flex'">
           👥 Share & Invite
         </button>
 
-        <button id="openManageUsersBtn" class="btn btn-secondary btn-sm" title="Manage & Delete Registered Users">
+        <button id="openManageUsersBtn" type="button" class="btn btn-secondary btn-sm" onclick="window.openManageUsersModal ? window.openManageUsersModal() : (document.getElementById('manageUsersModal').style.display='flex')" title="Manage & Delete Registered Users">
           ⚙️ Manage Users
         </button>
 
@@ -638,13 +638,13 @@
   </div>
 
   <!-- MODAL 4: EDIT TRIP -->
-  <div class="modal-overlay" id="editTripModal" style="display:none;">
+  <div class="modal-overlay" id="editTripModal" style="display:none;" onclick="if(event.target === this) (window.closeEditTripModal ? window.closeEditTripModal() : this.style.display='none')">
     <div class="modal-card">
       <div class="modal-header">
         <h3>✏️ Customize Trip Details</h3>
-        <button class="modal-close" id="closeEditTripBtn">&times;</button>
+        <button type="button" class="modal-close" id="closeEditTripBtn" onclick="window.closeEditTripModal ? window.closeEditTripModal() : (document.getElementById('editTripModal').style.display='none')">&times;</button>
       </div>
-      <form id="editTripForm">
+      <form id="editTripForm" onsubmit="return window.submitEditTrip ? window.submitEditTrip(event) : true">
         <div class="form-group">
           <label>Trip Title</label>
           <input type="text" id="editTripTitleInput" placeholder="e.g. Japan Cherry Blossom & Culinary Tour" required />
@@ -654,11 +654,11 @@
           <input type="text" id="editTripDescInput" placeholder="e.g. Cultural journey with fado, food, and wine" />
         </div>
         <div style="margin-top:1.5rem; padding-top:1rem; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.6rem;">
-          <button type="button" id="deleteTripBtn" class="btn btn-secondary" style="background:rgba(244,63,94,0.12); color:#fca5a5; border:1px solid rgba(244,63,94,0.35); font-size:0.8rem; cursor:pointer;" title="Permanently delete this entire itinerary">
+          <button type="button" id="deleteTripBtn" class="btn btn-secondary" onclick="window.deleteCurrentTrip ? window.deleteCurrentTrip() : false" style="background:rgba(244,63,94,0.12); color:#fca5a5; border:1px solid rgba(244,63,94,0.35); font-size:0.8rem; cursor:pointer;" title="Permanently delete this entire itinerary">
             🗑️ Delete This Trip
           </button>
           <div style="display:flex; gap:0.5rem;">
-            <button type="button" class="btn btn-secondary" id="cancelEditTripBtn">Cancel</button>
+            <button type="button" class="btn btn-secondary" id="cancelEditTripBtn" onclick="window.closeEditTripModal ? window.closeEditTripModal() : (document.getElementById('editTripModal').style.display='none')">Cancel</button>
             <button type="submit" class="btn btn-primary">Save Changes</button>
           </div>
         </div>
@@ -667,13 +667,13 @@
   </div>
 
   <!-- MODAL 5: CREATE NEW CUSTOM ITINERARY / TRIP -->
-  <div class="modal-overlay" id="createTripModal" style="display:none;">
+  <div class="modal-overlay" id="createTripModal" style="display:none;" onclick="if(event.target === this) (window.closeCreateTripModal ? window.closeCreateTripModal() : this.style.display='none')">
     <div class="modal-card">
       <div class="modal-header">
         <h3>✨ Create New Itinerary</h3>
-        <button class="modal-close" id="closeCreateTripBtn">&times;</button>
+        <button type="button" class="modal-close" id="closeCreateTripBtn" onclick="window.closeCreateTripModal ? window.closeCreateTripModal() : (document.getElementById('createTripModal').style.display='none')">&times;</button>
       </div>
-      <form id="createTripForm">
+      <form id="createTripForm" onsubmit="return window.submitCreateTrip ? window.submitCreateTrip(event) : true">
         <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
           Create a fresh itinerary from scratch for any region or country!
         </p>
@@ -716,7 +716,7 @@
         </div>
 
         <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" id="cancelCreateTripBtn">Cancel</button>
+          <button type="button" class="btn btn-secondary" id="cancelCreateTripBtn" onclick="window.closeCreateTripModal ? window.closeCreateTripModal() : (document.getElementById('createTripModal').style.display='none')">Cancel</button>
           <button type="submit" class="btn btn-primary">Create Itinerary</button>
         </div>
       </form>
@@ -724,11 +724,11 @@
   </div>
 
   <!-- MODAL 6: HELP & HOW-TO GUIDE -->
-  <div class="modal-overlay" id="helpModal" style="display:none;">
+  <div class="modal-overlay" id="helpModal" style="display:none;" onclick="if(event.target === this) (window.closeHelpModal ? window.closeHelpModal() : this.style.display='none')">
     <div class="modal-card" style="max-width:760px; max-height:85vh; overflow-y:auto;">
       <div class="modal-header">
         <h3>📖 Travel Scout &bull; User Guide &amp; How-To</h3>
-        <button class="modal-close" id="closeHelpModalBtn">&times;</button>
+        <button type="button" class="modal-close" id="closeHelpModalBtn" onclick="window.closeHelpModal ? window.closeHelpModal() : (document.getElementById('helpModal').style.display='none')">&times;</button>
       </div>
       <div style="font-size:0.88rem; color:var(--text-muted); display:flex; flex-direction:column; gap:1.2rem; padding:0.5rem 0;">
         
@@ -1361,7 +1361,7 @@
   </footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/app.js?v=3.6"></script>
+  <script src="/static/app.js?v=3.7"></script>
 </body>
 </html>
 
