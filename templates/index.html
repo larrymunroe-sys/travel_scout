@@ -8,11 +8,14 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="/static/styles.css?v=3.9" />
+  <link rel="stylesheet" href="/static/styles.css?v=4.0" />
   <link rel="manifest" href="/static/manifest.json" />
   <meta name="theme-color" content="#0284c7" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="icon" type="image/png" href="/static/icon-192.png" />
+  <link rel="shortcut icon" href="/static/icon-192.png" />
   <link rel="apple-touch-icon" href="/static/icon-192.png" />
 </head>
 
@@ -644,7 +647,7 @@
         <h3>✏️ Customize Trip Details</h3>
         <button type="button" class="modal-close" id="closeEditTripBtn" onclick="window.closeEditTripModal ? window.closeEditTripModal() : (document.getElementById('editTripModal').style.display='none')">&times;</button>
       </div>
-      <form id="editTripForm" onsubmit="return window.submitEditTrip ? window.submitEditTrip(event) : true">
+      <form id="editTripForm" onsubmit="event.preventDefault(); window.submitEditTrip ? window.submitEditTrip(event) : false; return false;">
         <div class="form-group">
           <label for="editTripTitleInput">Trip Title</label>
           <input type="text" id="editTripTitleInput" placeholder="e.g. Japan Cherry Blossom & Culinary Tour" required />
@@ -673,7 +676,7 @@
         <h3>✨ Create New Itinerary</h3>
         <button type="button" class="modal-close" id="closeCreateTripBtn" onclick="window.closeCreateTripModal ? window.closeCreateTripModal() : (document.getElementById('createTripModal').style.display='none')">&times;</button>
       </div>
-      <form id="createTripForm" onsubmit="return window.submitCreateTrip ? window.submitCreateTrip(event) : true">
+      <form id="createTripForm" onsubmit="event.preventDefault(); window.submitCreateTrip ? window.submitCreateTrip(event) : false; return false;">
         <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
           Create a fresh itinerary from scratch for any region or country!
         </p>
@@ -1363,7 +1366,7 @@
   </footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/app.js?v=3.9"></script>
+  <script src="/static/app.js?v=4.0"></script>
 </body>
 </html>
 

@@ -61,7 +61,6 @@ window.closeCreateTripModal = function() {
 // Global Edit Trip Modal Controls
 window.openEditTripModal = function() {
   if (!currentTripId) {
-    alert("You do not have an active itinerary selected to customize. Let's create your first itinerary!");
     window.openCreateTripModal();
     return;
   }
@@ -173,11 +172,7 @@ window.deleteCurrentTrip = async function() {
 window.submitCreateTrip = async function(e) {
   if (e && e.preventDefault) e.preventDefault();
   if (!currentUser) {
-    const sessionToken = localStorage.getItem("travel_scout_session");
-    const localUserId = localStorage.getItem("travel_scout_user_id");
-    if (sessionToken || localUserId) {
-      try { await loadCurrentUser(); } catch (err) {}
-    }
+    try { await loadCurrentUser(); } catch (err) {}
   }
   if (!currentUser) {
     alert("🔒 Please sign in with your Google or Gmail account before creating a new itinerary.");
@@ -227,6 +222,7 @@ window.submitCreateTrip = async function(e) {
       const modal = document.getElementById("createTripModal");
       if (modal) modal.style.display = "none";
       const form = document.getElementById("createTripForm");
+      if (form) form.reset();
       currentTripId = data.trip_id;
       window.currentTripId = currentTripId;
       await loadTripsDropdown();
@@ -244,6 +240,9 @@ window.submitCreateTrip = async function(e) {
 
 window.submitEditTrip = async function(e) {
   if (e && e.preventDefault) e.preventDefault();
+  if (!currentUser) {
+    try { await loadCurrentUser(); } catch (err) {}
+  }
   if (!currentUser) {
     alert("🔒 Please sign in with your Google or Gmail account before customizing itineraries.");
     if (window.openLogin) window.openLogin();
@@ -397,6 +396,9 @@ async function loadCurrentUser() {
     const data = await res.json();
     currentUser = data.current_user;
     window.currentUser = currentUser;
+    if (currentUser && currentUser.id) {
+      localStorage.setItem("travel_scout_user_id", currentUser.id);
+    }
 
     const avatarEl = document.getElementById("currentUserAvatar");
     const nameEl = document.getElementById("currentUserName");

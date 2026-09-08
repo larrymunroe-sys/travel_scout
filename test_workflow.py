@@ -185,13 +185,13 @@ class WorkflowTestRunner:
             f"({len(labels)} labels verified, 0 unassociated)"
         )
 
-        # 5. Cache Invalidation Version Bumps (v=3.9)
+        # 5. Cache Invalidation Version Bumps (v=4.0)
         if self.mode == "LIVE_HTTP":
-            self.assert_test("styles.css has fresh cache version (?v=3.8 or ?v=3.9)", 'styles.css?v=3.8' in html or 'styles.css?v=3.9' in html)
-            self.assert_test("app.js has fresh cache version (?v=3.8 or ?v=3.9)", 'app.js?v=3.8' in html or 'app.js?v=3.9' in html)
+            self.assert_test("styles.css has fresh cache version (?v=3.9 or ?v=4.0)", 'styles.css?v=3.9' in html or 'styles.css?v=4.0' in html)
+            self.assert_test("app.js has fresh cache version (?v=3.9 or ?v=4.0)", 'app.js?v=3.9' in html or 'app.js?v=4.0' in html)
         else:
-            self.assert_test("styles.css has cache version ?v=3.9", 'styles.css?v=3.9' in html)
-            self.assert_test("app.js has cache version ?v=3.9", 'app.js?v=3.9' in html)
+            self.assert_test("styles.css has cache version ?v=4.0", 'styles.css?v=4.0' in html)
+            self.assert_test("app.js has cache version ?v=4.0", 'app.js?v=4.0' in html)
 
         # 6. Service Worker headers
         sw_res = self._request("GET", "/sw.js")
@@ -206,9 +206,13 @@ class WorkflowTestRunner:
         else:
             self.assert_test("Service Worker has no-cache header", "no-cache" in cache_control.lower())
         self.assert_test(
-            "Service Worker contains CACHE_NAME travel-scout-v3.8/v3.9",
-            "travel-scout-v3.9" in sw_res.text or "travel-scout-v3.8" in sw_res.text
+            "Service Worker contains CACHE_NAME travel-scout-v4.0",
+            "travel-scout-v4.0" in sw_res.text or "travel-scout-v3.9" in sw_res.text
         )
+
+        # 7. Favicon endpoint
+        fav_res = self._request("GET", "/favicon.ico")
+        self.assert_test("Favicon (/favicon.ico) returns 200 OK", fav_res.status_code == 200)
 
     # --------------------------------------------------------------------------
     # WORKFLOW 1: Login & Session Authentication

@@ -1,5 +1,5 @@
 // Travel Scout Progressive Web App Service Worker (Offline Cache)
-const CACHE_NAME = "travel-scout-v3.9";
+const CACHE_NAME = "travel-scout-v4.0";
 const PRECACHE_URLS = [
   "/static/styles.css",
   "/static/app.js",

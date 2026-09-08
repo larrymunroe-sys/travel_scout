@@ -91,6 +91,13 @@ async def get_pwa_service_worker():
         return response
     return PlainTextResponse(status_code=404, content="Service Worker not found")
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def get_favicon():
+    icon_path = static_dir / "icon-192.png"
+    if icon_path.exists():
+        return FileResponse(str(icon_path), media_type="image/png")
+    return PlainTextResponse(status_code=404, content="Favicon not found")
+
 # Ensure database tables, seeds, and backups exist on import
 init_db()
 with SessionLocal() as _db:
