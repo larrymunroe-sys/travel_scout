@@ -151,3 +151,9 @@ Domain-specific specialist skills are located under `.agents/skills/<skill-name>
     - CLI script: `.agents/skills/speakeasy-cocktail-scout/scripts/scout_speakeasy.py`
     - API endpoint: `POST /api/trips/{trip_id}/scout/speakeasy-cocktails`
 
+14. **`bookstore-scout`** (Independent & Vintage Bookstores Scout):
+    - Discovers independent bookstores, antiquarian and used book vaults, rare first editions, community literary cafes, and indie presses.
+    - CLI script: `.agents/skills/bookstore-scout/scripts/scout_bookstores.py`
+    - API endpoint: `POST /api/trips/{trip_id}/scout/bookstores`
+
+

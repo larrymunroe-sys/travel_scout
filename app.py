@@ -2379,4 +2379,12 @@ async def run_trip_speakeasy_cocktails(trip_id: str, payload: SpecialistScoutPay
     return await run_trip_specialist_agent(trip_id, payload, request, db)
 
 
+@app.post("/api/trips/{trip_id}/scout/bookstores")
+async def run_trip_bookstores(trip_id: str, payload: SpecialistScoutPayload, request: Request, db: Session = Depends(get_db)):
+    """Run Independent & Vintage Bookstores Scout Agent."""
+    payload.agent_type = "bookstores"
+    return await run_trip_specialist_agent(trip_id, payload, request, db)
+
+
+
 

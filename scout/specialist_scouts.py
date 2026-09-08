@@ -95,6 +95,19 @@ SPECIALIST_AGENTS_CONFIG: Dict[str, Dict[str, Any]] = {
         "default_cost": "$$$ Craft Cocktails",
         "tag": "Speakeasy Bar",
         "description_template": "Intimate craft cocktail destination featuring artisanal mixology and speakeasy ambiance."
+    },
+    "bookstores": {
+        "name": "Independent & Vintage Bookstores Scout",
+        "category": "gems",
+        "icon": "📚",
+        "queries": [
+            "best independent bookstores vintage used books rare editions",
+            "secondhand bookstore antiquarian books used novels indie bookshop",
+            "literary bookshop independent bookstore community cafe books"
+        ],
+        "default_cost": "Free / Browse Books",
+        "tag": "Bookstore",
+        "description_template": "Beloved independent bookstore featuring curated collections of new, vintage, and used books."
     }
 }
 
@@ -218,7 +231,7 @@ def curate_and_ingest_specialist(
                 lat=v.get("lat"),
                 lon=v.get("lon"),
                 cost=v.get("cost") or cfg.get("default_cost", "$$"),
-                is_free=cfg.get("category") == "records",
+                is_free=cfg.get("category") == "records" or "free" in (v.get("cost") or cfg.get("default_cost", "")).lower(),
                 time_info=v.get("time_info", "Check shop hours"),
                 highlight=v.get("highlight") or cfg.get("description_template", "Curated local venue."),
                 description=v.get("description") or f"Curated by {cfg.get('name', 'Specialist Agent')}.",
