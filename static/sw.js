@@ -1,5 +1,5 @@
 // Travel Scout Progressive Web App Service Worker (Offline Cache)
-const CACHE_NAME = "travel-scout-v3.7";
+const CACHE_NAME = "travel-scout-v3.8";
 const PRECACHE_URLS = [
   "/static/styles.css",
   "/static/app.js",
@@ -9,12 +9,13 @@ const PRECACHE_URLS = [
 ];
 
 self.addEventListener("install", (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(PRECACHE_URLS).catch((err) => {
         console.warn("Precache failed for some assets:", err);
       });
-    }).then(() => self.skipWaiting())
+    })
   );
 });
 
@@ -81,24 +82,18 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 5. Static assets only (CSS, JS, images, fonts): Cache-first with background revalidation
+  // 5. Static assets (CSS, JS, images, fonts): Network-first with offline cache fallback
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        fetch(event.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
-          }
-        }).catch(() => {});
-        return cachedResponse;
-      }
-      return fetch(event.request).then((networkResponse) => {
+    fetch(event.request)
+      .then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
           const clone = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         }
         return networkResponse;
-      });
-    })
+      })
+      .catch(() => {
+        return caches.match(event.request);
+      })
   );
 });

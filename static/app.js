@@ -44,19 +44,7 @@ window.closeLogin = function() {
 };
 
 // Global Create Trip Modal Controls
-window.openCreateTripModal = async function() {
-  if (!currentUser) {
-    const sessionToken = localStorage.getItem("travel_scout_session");
-    const localUserId = localStorage.getItem("travel_scout_user_id");
-    if (sessionToken || localUserId) {
-      try { await loadCurrentUser(); } catch (e) {}
-    }
-  }
-  if (!currentUser) {
-    alert("🔒 Please sign in with your Google or Gmail account before creating a new itinerary.");
-    if (window.openLogin) window.openLogin();
-    return;
-  }
+window.openCreateTripModal = function() {
   const modal = document.getElementById("createTripModal");
   if (modal) {
     modal.style.display = "flex";
@@ -71,41 +59,72 @@ window.closeCreateTripModal = function() {
 };
 
 // Global Edit Trip Modal Controls
-window.openEditTripModal = async function() {
-  if (!currentUser) {
-    const sessionToken = localStorage.getItem("travel_scout_session");
-    const localUserId = localStorage.getItem("travel_scout_user_id");
-    if (sessionToken || localUserId) {
-      try { await loadCurrentUser(); } catch (e) {}
-    }
-  }
-  if (!currentUser) {
-    alert("🔒 Please sign in with your Google or Gmail account before customizing itineraries.");
-    if (window.openLogin) window.openLogin();
-    return;
-  }
+window.openEditTripModal = function() {
   if (!currentTripId) {
     alert("You do not have an active itinerary selected to customize. Let's create your first itinerary!");
     window.openCreateTripModal();
     return;
   }
-  if (!currentTripData || !currentTripData.trip) {
-    try { await refreshTrip(); } catch (e) {}
-  }
-  if (!currentTripData || !currentTripData.trip) {
-    alert("Unable to load itinerary details to customize. Please try again.");
-    return;
-  }
   const titleInput = document.getElementById("editTripTitleInput");
   const descInput = document.getElementById("editTripDescInput");
-  if (titleInput && currentTripData.trip) {
+  if (titleInput && currentTripData && currentTripData.trip) {
     titleInput.value = currentTripData.trip.title || "";
   }
-  if (descInput && currentTripData.trip) {
+  if (descInput && currentTripData && currentTripData.trip) {
     descInput.value = currentTripData.trip.description || "";
   }
   const modal = document.getElementById("editTripModal");
   if (modal) modal.style.display = "flex";
+};
+
+window.closeEditTripModal = function() {
+  const modal = document.getElementById("editTripModal");
+  if (modal) modal.style.display = "none";
+};
+
+// Global Invite Modal Controls
+window.openInviteModal = function() {
+  const modal = document.getElementById("inviteModal");
+  if (modal) {
+    modal.style.display = "flex";
+    if (typeof renderModalCollaborators === "function") renderModalCollaborators();
+  }
+};
+window.closeInviteModal = function() {
+  const modal = document.getElementById("inviteModal");
+  if (modal) modal.style.display = "none";
+};
+
+// Global Print & Export Modal Controls
+window.openPrintModal = function() {
+  const modal = document.getElementById("printModal");
+  if (modal) {
+    if (currentTripData) {
+      const avail = currentTripData.available_dates || [];
+      const printSingleDateSelect = document.getElementById("printSingleDateSelect");
+      const printRangeStart = document.getElementById("printRangeStart");
+      const printRangeEnd = document.getElementById("printRangeEnd");
+      if (printSingleDateSelect && avail.length > 0) {
+        printSingleDateSelect.innerHTML = avail.map(d => `<option value="${d}">📅 ${d}</option>`).join("");
+      }
+      if (avail.length > 0) {
+        if (printRangeStart) printRangeStart.value = avail[0];
+        if (printRangeEnd) printRangeEnd.value = avail[avail.length - 1];
+      }
+      if (typeof updatePrintPreview === "function") updatePrintPreview();
+    }
+    modal.style.display = "flex";
+  }
+};
+window.closePrintModal = function() {
+  const modal = document.getElementById("printModal");
+  if (modal) modal.style.display = "none";
+};
+
+// Global Add Item Modal Close Control
+window.closeAddItemModal = function() {
+  const modal = document.getElementById("addItemModal");
+  if (modal) modal.style.display = "none";
 };
 
 window.closeEditTripModal = function() {
@@ -3994,12 +4013,7 @@ function initCalendarExport() {
 
 // 15. Manual Itinerary Card Creation Modal
 window.openAddItemModal = function(preselectedDate = "todo", preselectedCity = null) {
-  if (!currentUser) {
-    alert("🔒 Please sign in with your Google or Gmail account before adding custom stops.");
-    if (window.openLogin) window.openLogin();
-    return;
-  }
-  if (!currentTripId) {
+  if (!currentTripId && (!currentTripData || !currentTripData.trip)) {
     alert("Please select or create an itinerary first.");
     return;
   }
@@ -4104,6 +4118,9 @@ function initAddItemModal() {
   if (form) {
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (!currentUser) {
+        try { await loadCurrentUser(); } catch (err) {}
+      }
       if (!currentUser) {
         alert("🔒 Please sign in with your Google or Gmail account before adding custom stops.");
         if (window.openLogin) window.openLogin();

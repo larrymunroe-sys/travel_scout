@@ -84,7 +84,11 @@ async def get_pwa_manifest():
 async def get_pwa_service_worker():
     sw_path = static_dir / "sw.js"
     if sw_path.exists():
-        return FileResponse(str(sw_path), media_type="application/javascript")
+        response = FileResponse(str(sw_path), media_type="application/javascript")
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
     return PlainTextResponse(status_code=404, content="Service Worker not found")
 
 # Ensure database tables, seeds, and backups exist on import

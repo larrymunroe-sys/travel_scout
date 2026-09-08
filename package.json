@@ -6,7 +6,8 @@
   "scripts": {
     "start": "python main.py web",
     "dev": "python main.py dev",
-    "scan": "python main.py scan"
+    "scan": "python main.py scan",
+    "test": "python test_workflow.py"
   },
   "keywords": [
     "travel",
