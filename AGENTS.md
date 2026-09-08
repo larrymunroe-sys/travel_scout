@@ -120,3 +120,34 @@ Domain-specific specialist skills are located under `.agents/skills/<skill-name>
    - Audits planned activities for booking requirements, classifies reservation urgency (critical vs. walk-in), and produces an actionable reservation timeline.
    - CLI script: `.agents/skills/concierge-agent/scripts/concierge_plan.py`
    - API endpoint: `GET /api/trips/{trip_id}/concierge/plan`
+
+8. **`vintage-gear-scout`** (Vintage Musical Instruments Scout):
+   - Discovers vintage guitar vaults, tube amp workshops, rare analog synthesizers, boutique pedals, and independent instrument dealers.
+   - CLI script: `.agents/skills/vintage-gear-scout/scripts/scout_gear.py`
+   - API endpoint: `POST /api/trips/{trip_id}/scout/vintage-gear`
+
+9. **`vintage-fashion-scout`** (Curated Vintage Clothing & Archival Fashion Scout):
+   - Discovers curated vintage clothing boutiques, archival designer apparel, vintage selvedge denim, and retro wear.
+   - CLI script: `.agents/skills/vintage-fashion-scout/scripts/scout_fashion.py`
+   - API endpoint: `POST /api/trips/{trip_id}/scout/vintage-fashion`
+
+10. **`home-design-scout`** (Vintage & Modern Home Design Scout):
+    - Discovers mid-century modern furniture, artisan ceramics, architectural salvage, and modernist interior design shops.
+    - CLI script: `.agents/skills/home-design-scout/scripts/scout_design.py`
+    - API endpoint: `POST /api/trips/{trip_id}/scout/home-design`
+
+11. **`culinary-goods-scout`** (Gourmet Cooking & Food Specialty Stores Scout):
+    - Discovers artisan kitchenware purveyors, hand-forged Japanese knives, specialty spice merchants, and gourmet pantry markets.
+    - CLI script: `.agents/skills/culinary-goods-scout/scripts/scout_culinary_goods.py`
+    - API endpoint: `POST /api/trips/{trip_id}/scout/culinary-goods`
+
+12. **`vinyl-record-scout`** (Record Stores Used & New Scout):
+    - Discovers independent vinyl record stores, audiophile pressings, rare 45s, and deep crate digging destinations.
+    - CLI script: `.agents/skills/vinyl-record-scout/scripts/scout_vinyl.py`
+    - API endpoint: `POST /api/trips/{trip_id}/scout/vinyl-records`
+
+13. **`speakeasy-cocktail-scout`** (Craft Cocktail Bars & Speakeasies Scout):
+    - Discovers secret hidden-door speakeasies, unmarked artisanal cocktail lounges, and historic mixology dens.
+    - CLI script: `.agents/skills/speakeasy-cocktail-scout/scripts/scout_speakeasy.py`
+    - API endpoint: `POST /api/trips/{trip_id}/scout/speakeasy-cocktails`
+

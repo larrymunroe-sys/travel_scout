@@ -11,3 +11,4 @@ dist/
 *.log
 .demo_seeded
 .session_secret
+scratch/

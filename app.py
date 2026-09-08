@@ -31,6 +31,7 @@ from scout.transit_optimizer import optimize_trip_day_schedule
 from scout.stay_scout import evaluate_trip_lodging
 from scout.budget_comptroller import audit_trip_budget
 from scout.concierge_agent import evaluate_reservation_plan
+from scout.specialist_scouts import run_specialist_scout, SPECIALIST_AGENTS_CONFIG
 from scout.weather import get_trip_weather
 from scout.calendar_sync import generate_trip_ics, generate_google_calendar_url
 
@@ -2286,5 +2287,96 @@ async def get_concierge_reservation_plan(
     user = get_current_user(request, db)
     check_trip_access(trip_id, user, db, require_edit=False)
     return evaluate_reservation_plan(db, trip_id)
+
+
+# ==================== SPECIALIZED SHOPPING & CURATION SCOUTS ====================
+
+class SpecialistScoutPayload(BaseModel):
+    agent_type: Optional[str] = "vintage-gear"
+    city_id: Optional[str] = "all"
+    max_results: int = 3
+    enrich_locations: bool = True
+
+
+@app.post("/api/trips/{trip_id}/scout/specialist-agent")
+async def run_trip_specialist_agent(
+    trip_id: str,
+    payload: SpecialistScoutPayload,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Execute any of the 6 Specialist Discovery Scouts (vintage gear, fashion, design, culinary, vinyl, speakeasies)."""
+    user = get_current_user(request, db)
+    trip = check_trip_access(trip_id, user, db, require_edit=True)
+
+    agent_type = payload.agent_type or "vintage-gear"
+    if agent_type not in SPECIALIST_AGENTS_CONFIG:
+        raise HTTPException(status_code=400, detail=f"Invalid agent_type. Must be one of: {', '.join(SPECIALIST_AGENTS_CONFIG.keys())}")
+
+    segments = trip.city_segments
+    if payload.city_id and payload.city_id != "all":
+        segments = [s for s in segments if s.id == payload.city_id]
+
+    results = []
+    total_discovered = 0
+    for seg in segments:
+        res = run_specialist_scout(
+            db=db,
+            trip_id=trip.id,
+            city_id=seg.id,
+            user_id=user.id,
+            agent_type=agent_type,
+            max_results=payload.max_results,
+            enrich_locations=payload.enrich_locations
+        )
+        total_discovered += res.get("newly_discovered", 0)
+        results.append(res)
+
+    return {
+        "status": "success",
+        "trip_id": trip_id,
+        "agent_type": agent_type,
+        "agent_name": SPECIALIST_AGENTS_CONFIG[agent_type]["name"],
+        "icon": SPECIALIST_AGENTS_CONFIG[agent_type]["icon"],
+        "total_discovered": total_discovered,
+        "results": results
+    }
+
+
+@app.post("/api/trips/{trip_id}/scout/vintage-gear")
+async def run_trip_vintage_gear(trip_id: str, payload: SpecialistScoutPayload, request: Request, db: Session = Depends(get_db)):
+    payload.agent_type = "vintage-gear"
+    return await run_trip_specialist_agent(trip_id, payload, request, db)
+
+
+@app.post("/api/trips/{trip_id}/scout/vintage-fashion")
+async def run_trip_vintage_fashion(trip_id: str, payload: SpecialistScoutPayload, request: Request, db: Session = Depends(get_db)):
+    payload.agent_type = "vintage-fashion"
+    return await run_trip_specialist_agent(trip_id, payload, request, db)
+
+
+@app.post("/api/trips/{trip_id}/scout/home-design")
+async def run_trip_home_design(trip_id: str, payload: SpecialistScoutPayload, request: Request, db: Session = Depends(get_db)):
+    payload.agent_type = "home-design"
+    return await run_trip_specialist_agent(trip_id, payload, request, db)
+
+
+@app.post("/api/trips/{trip_id}/scout/culinary-goods")
+async def run_trip_culinary_goods(trip_id: str, payload: SpecialistScoutPayload, request: Request, db: Session = Depends(get_db)):
+    payload.agent_type = "culinary-goods"
+    return await run_trip_specialist_agent(trip_id, payload, request, db)
+
+
+@app.post("/api/trips/{trip_id}/scout/vinyl-records")
+async def run_trip_vinyl_records(trip_id: str, payload: SpecialistScoutPayload, request: Request, db: Session = Depends(get_db)):
+    payload.agent_type = "vinyl-records"
+    return await run_trip_specialist_agent(trip_id, payload, request, db)
+
+
+@app.post("/api/trips/{trip_id}/scout/speakeasy-cocktails")
+async def run_trip_speakeasy_cocktails(trip_id: str, payload: SpecialistScoutPayload, request: Request, db: Session = Depends(get_db)):
+    payload.agent_type = "speakeasy-cocktails"
+    return await run_trip_specialist_agent(trip_id, payload, request, db)
+
 
 
