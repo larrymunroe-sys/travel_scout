@@ -1,5 +1,5 @@
 // Travel Scout Progressive Web App Service Worker (Offline Cache)
-const CACHE_NAME = "travel-scout-v4.1";
+const CACHE_NAME = "travel-scout-v4.2";
 const PRECACHE_URLS = [
   "/static/styles.css",
   "/static/app.js",
@@ -31,7 +31,6 @@ self.addEventListener("activate", (event) => {
         })
       );
     }).then(() => {
-      // Evict any dynamic or auth responses that may have been cached previously
       return caches.open(CACHE_NAME).then((cache) => {
         return Promise.all([
           cache.delete("/"),
@@ -46,26 +45,29 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
-  // 1. Skip non-GET requests (POST, PUT, DELETE go straight to network)
+  // 1. ONLY handle http/https — skip chrome-extension://, data:, blob:, etc.
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return;
+  }
+
+  // 2. Skip non-GET requests
   if (event.request.method !== "GET") {
     return;
   }
 
-  // 2. NEVER intercept or cache auth routes (always direct live network)
+  // 3. NEVER intercept auth routes
   if (url.pathname.startsWith("/auth/")) {
     return;
   }
 
-  // 3. Navigation requests (HTML pages): Network-only, NO cache fallback
-  //    Dynamic HTML depends on session cookies; serving stale cached HTML
-  //    would show logged-out UI to a logged-in user and vice versa.
-  if (event.request.mode === "navigate" || url.pathname === "/" || url.pathname === "/index.html") {
+  // 4. Navigation requests: network-only, inline offline fallback
+  if (event.request.mode === "navigate") {
     event.respondWith(
       fetch(event.request).catch(() => {
         return new Response(
           "<!DOCTYPE html><html><head><title>Travel Scout - Offline</title></head>" +
           "<body style='font-family:system-ui;text-align:center;padding:4rem;background:#0f172a;color:#e2e8f0;'>" +
-          "<h1>🌍 Travel Scout</h1>" +
+          "<h1>\u{1F30D} Travel Scout</h1>" +
           "<p>You appear to be offline. Please check your internet connection and reload.</p>" +
           "<button onclick='location.reload()' style='margin-top:1rem;padding:0.75rem 1.5rem;font-size:1rem;" +
           "background:#38bdf8;color:#0f172a;border:none;border-radius:8px;cursor:pointer;font-weight:700;'>Retry</button>" +
@@ -77,22 +79,22 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 4. API routes: Network-first, with offline cache fallback
+  // 5. API routes: network-first, cache fallback
   if (url.pathname.startsWith("/api/")) {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
           if (response && response.status === 200) {
             const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+            caches.open(CACHE_NAME).then((c) => c.put(event.request, clone).catch(() => {}));
           }
           return response;
         })
         .catch(() => {
           return caches.match(event.request).then((cached) => {
-            return cached || new Response(
-              JSON.stringify({ detail: "You are offline and this data is not cached." }),
-              { status: 503, headers: { "Content-Type": "application/json" } }
+            return cached || Response.json(
+              { detail: "Offline — data not cached." },
+              { status: 503 }
             );
           });
         })
@@ -100,13 +102,13 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 5. Static assets (CSS, JS, images, fonts): Network-first with cache fallback
+  // 6. Static assets: network-first, cache fallback
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
           const clone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          caches.open(CACHE_NAME).then((c) => c.put(event.request, clone).catch(() => {}));
         }
         return networkResponse;
       })
