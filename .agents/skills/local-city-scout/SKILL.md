@@ -28,11 +28,15 @@ The scout extracts and categorizes happenings including, but not limited to:
 ## Multi-Step Execution Procedure
 
 ### Step 1: Identify Destination Cities on the Itinerary
-Determine the target destination city and travel dates:
-- Query the database via Python or inspect the active trip in Travel Scout.
-- Or use the command runner with the helper script:
+**Mandatory Requirement**: The cultural scout agent **MUST ALWAYS** resolve destination cities directly from the active trip's itinerary (`city_segments` table in `travel_scout.db` or the active trip in Travel Scout). Never use hardcoded placeholders or arbitrary cities.
+- Determine destination cities on the itinerary using the helper script:
   ```bash
-  python .agents/skills/local-city-scout/scripts/scout_events.py --all-cities --dry-run
+  # Automatically pulls and scouts all destination cities directly from the active itinerary:
+  python .agents/skills/local-city-scout/scripts/scout_events.py
+  ```
+- Or specify a specific destination city from the itinerary:
+  ```bash
+  python .agents/skills/local-city-scout/scripts/scout_events.py --city "San Diego"
   ```
 
 ### Step 2: Uncover Local Newspapers & Media Outlets

@@ -61,32 +61,50 @@ def main():
 
     db = SessionLocal()
     try:
-        # Determine trip
+        # Determine trip (prioritize explicit trip-id, then latest active trip)
         trip = None
         if args.trip_id:
             trip = db.query(Trip).filter(Trip.id == args.trip_id).first()
         else:
-            trip = db.query(Trip).first()
+            # Pick most recently created trip with itinerary segments
+            trip = db.query(Trip).order_by(Trip.created_at.desc()).first()
+            if not trip or not trip.city_segments:
+                for t in db.query(Trip).all():
+                    if t.city_segments:
+                        trip = t
+                        break
 
         if not trip and not args.dry_run:
             print("Error: No trips found in database to attach discoveries to.")
             sys.exit(1)
 
         user = db.query(User).first()
-        user_id = user.id if user else None
+        user_id = user.id if user else (trip.owner_id if trip else None)
 
         cities_to_scout = []
         if args.city:
-            cities_to_scout.append({"name": args.city, "country": args.country, "segment_id": None})
-        elif trip and args.all_cities:
-            for seg in trip.city_segments:
-                cities_to_scout.append({"name": seg.city_name, "country": seg.country, "segment_id": seg.id})
+            # Check if this city matches an existing segment in the trip itinerary
+            matched_seg = None
+            if trip:
+                for seg in trip.city_segments:
+                    if seg.city_name.lower() == args.city.strip().lower():
+                        matched_seg = seg
+                        break
+            cities_to_scout.append({
+                "name": args.city,
+                "country": args.country or (matched_seg.country if matched_seg else ""),
+                "segment_id": matched_seg.id if matched_seg else None
+            })
         elif trip and trip.city_segments:
-            # Default to first city segment
-            seg = trip.city_segments[0]
-            cities_to_scout.append({"name": seg.city_name, "country": seg.country, "segment_id": seg.id})
+            # By default: automatically scout ALL destination cities directly from the itinerary!
+            for seg in sorted(trip.city_segments, key=lambda x: x.order_index):
+                cities_to_scout.append({
+                    "name": seg.city_name,
+                    "country": seg.country,
+                    "segment_id": seg.id
+                })
         else:
-            print("No cities provided. Use --city <name> or --all-cities.")
+            print("No destination cities found on trip itinerary. Use --city <name>.")
             sys.exit(1)
 
         print(f"\n==================================================================")

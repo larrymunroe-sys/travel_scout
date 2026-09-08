@@ -66,9 +66,17 @@ def live_city_search(
                 site_mod = CHANNEL_SITE_MODIFIERS.get(channel, "")
                 full_query = f"{city_name} {query}".strip()
                 if site_mod:
-                    full_query = f"{full_query} {site_mod}"
+                    try:
+                        raw_results = list(ddgs.text(f"{full_query} {site_mod}", max_results=max_results))
+                    except Exception:
+                        raw_results = []
 
-                raw_results = list(ddgs.text(full_query, max_results=max_results))
+                if not raw_results:
+                    try:
+                        raw_results = list(ddgs.text(full_query, max_results=max_results))
+                    except Exception as clean_err:
+                        print(f"Clean query search error for '{full_query}': {clean_err}")
+                        raw_results = []
     except Exception as e:
         print(f"DuckDuckGo search error: {e}")
         return []

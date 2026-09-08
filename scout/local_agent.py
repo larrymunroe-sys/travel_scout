@@ -50,6 +50,14 @@ KNOWN_LOCAL_PUBLICATIONS: Dict[str, List[Dict[str, str]]] = {
         {"name": "Tokyo Cheapo", "type": "Free Events, Markets & Indie Guide", "url": "https://tokyocheapo.com"},
         {"name": "Metropolis Japan", "type": "English Weekly Magazine", "url": "https://metropolisjapan.com"},
     ],
+    "san diego": [
+        {"name": "San Diego Reader", "type": "Alternative Weekly & Events Calendar", "url": "https://www.sandiegoreader.com"},
+        {"name": "Voice of San Diego", "type": "Local Culture & Community Journalism", "url": "https://voiceofsandiego.org"},
+        {"name": "KPBS Arts & Culture Calendar", "type": "San Diego Public Media Events", "url": "https://www.kpbs.org/arts-culture"},
+        {"name": "There San Diego", "type": "What's Happening in San Diego", "url": "https://theresandiego.com"},
+        {"name": "San Diego Magazine", "type": "Dining, Culture & Neighborhood Guides", "url": "https://sandiegomagazine.com"},
+        {"name": "Pacific San Diego", "type": "Nightlife, Music & Arts", "url": "https://pacificsandiego.com"},
+    ],
 }
 
 # Event scan search templates categorized by focus
@@ -161,12 +169,14 @@ def discover_city_publications(city_name: str, country: Optional[str] = None) ->
         query = f"{city_name} alternative weekly newspaper OR arts culture magazine OR local events guide"
         found = live_city_search(city_name, query, channel="press", category_hint="press", max_results=4)
         for f in found:
-            # Add if not duplicate URL
-            if not any(r["url"] == f["url"] for r in results):
+            # Add if title and url are valid and not duplicate
+            url = f.get("url", "").strip()
+            title = f.get("title", "").strip()
+            if url and title and not any(r["url"] == url for r in results):
                 results.append({
-                    "name": f["title"],
+                    "name": title,
                     "type": "Local Press / Alt-Weekly",
-                    "url": f["url"],
+                    "url": url,
                     "highlight": f.get("highlight", "")
                 })
     except Exception as e:
@@ -210,10 +220,14 @@ def scout_local_events_for_city(
                     max_results=max_per_type
                 )
                 for h in hits:
-                    title_norm = h["title"].strip().lower()
+                    title = (h.get("title") or "").strip()
+                    if not title:
+                        continue
+                    title_norm = title.lower()
                     if title_norm not in seen_titles:
                         seen_titles.add(title_norm)
                         # Ensure category matches our focused event type
+                        h["title"] = title
                         h["category"] = cat
                         if event_type == "free":
                             h["is_free"] = True
@@ -268,17 +282,20 @@ def run_local_agent_for_city_segment(
     # 3. Ingest into database
     new_items: List[Dict[str, Any]] = []
     for ev in events:
+        ev_title = (ev.get("title") or "").strip()
+        if not ev_title:
+            continue
         # Check if already in DB
         exists = db.query(ItineraryItem).filter(
             ItineraryItem.trip_id == trip_id,
-            ItineraryItem.title == ev["title"]
+            ItineraryItem.title == ev_title
         ).first()
 
         if not exists:
             item = ItineraryItem(
                 trip_id=trip_id,
                 city_segment_id=city_seg.id,
-                title=ev["title"],
+                title=ev_title,
                 category=ev.get("category", "gems"),
                 neighborhood=ev.get("neighborhood", f"{city_name} Cultural District"),
                 address=ev.get("address", city_name),
