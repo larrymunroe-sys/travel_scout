@@ -23,7 +23,7 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
-def run_web(host: str = None, port: int = None):
+def run_web(host: str = None, port: int = None, reload: bool = False):
     if not host:
         host = os.environ.get("HOST", "0.0.0.0" if os.environ.get("PORT") else "127.0.0.1")
     if not port:
@@ -38,8 +38,10 @@ def run_web(host: str = None, port: int = None):
     print("Multi-City Collaborative Travel Scout Agent")
     print("Pre-Seeded Journey: Lisbon -> Porto -> Braganca")
     print(f"Dashboard running at: http://{host}:{chosen_port}")
+    if reload:
+        print("Auto-reload: ENABLED (development mode)")
     print("=" * 65)
-    uvicorn.run("app:app", host=host, port=chosen_port, reload=False)
+    uvicorn.run("app:app", host=host, port=chosen_port, reload=reload)
 
 def run_scan():
     init_db()
@@ -63,17 +65,25 @@ def main():
     web_p = subparsers.add_parser("web", help="Start FastAPI web dashboard")
     web_p.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0" if os.environ.get("PORT") else "127.0.0.1"))
     web_p.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8000)))
+    web_p.add_argument("--reload", action="store_true", help="Enable auto-reload on code change")
+    web_p.add_argument("mode", nargs="?", default=None, help="Optional mode (e.g. dev)")
+
+    dev_p = subparsers.add_parser("dev", help="Start FastAPI web dashboard in dev mode with auto-reload")
+    dev_p.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0" if os.environ.get("PORT") else "127.0.0.1"))
+    dev_p.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8000)))
 
     subparsers.add_parser("scan", help="Run multi-city autonomous scan")
 
-    args = parser.parse_args()
+    # Gracefully tolerate npm or CLI pass-through arguments
+    args, unknown = parser.parse_known_args()
 
     if args.command == "scan":
         run_scan()
     else:
         host = getattr(args, "host", None)
         port = getattr(args, "port", None)
-        run_web(host, port)
+        is_dev = (args.command == "dev") or getattr(args, "reload", False) or (getattr(args, "mode", None) == "dev") or ("dev" in unknown)
+        run_web(host, port, reload=is_dev)
 
 if __name__ == "__main__":
     main()
