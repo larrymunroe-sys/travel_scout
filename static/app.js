@@ -3359,8 +3359,10 @@ function initLocalAgentModal() {
 
         if (resultsBox) {
           resultsBox.style.display = "block";
-          resultsTitle.textContent = `✨ Discovered ${data.total_newly_discovered} New Cultural Events!`;
-          resultsDetail.innerHTML = `Scanned <strong>${data.total_cities_scanned}</strong> destination cities across local newspapers, alt-weeklies, and event platforms. All discoveries are now live in your <strong>Explore & Discover</strong> wishlist!`;
+          const count = data.total_newly_discovered ?? data.total_discovered ?? 0;
+          const citiesCount = data.total_cities_scanned ?? (data.results ? data.results.length : 1);
+          resultsTitle.textContent = `✨ Discovered ${count} New Cultural Discoveries!`;
+          resultsDetail.innerHTML = `Scanned <strong>${citiesCount}</strong> destination cities across local newspapers, alt-weeklies, and specialty channels. All discoveries are now live in your <strong>Explore & Discover</strong> wishlist!`;
         }
 
         executeBtn.disabled = false;

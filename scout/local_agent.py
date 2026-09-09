@@ -11,7 +11,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from sqlalchemy.orm import Session
 
 from database.models import CitySegment, ItineraryItem
-from scout.web_search import live_city_search
+from scout.config import CATEGORIES
+from scout.web_search import live_city_search, CHANNEL_SITE_MODIFIERS
 from scout.geocoding import resolve_city_coordinates, resolve_venue_coordinates
 from scout.transit import generate_directions_url
 from scout.backup import compute_item_hash, is_item_deleted_and_unchanged, auto_backup_on_change
@@ -63,10 +64,11 @@ KNOWN_LOCAL_PUBLICATIONS: Dict[str, List[Dict[str, str]]] = {
     ],
 }
 
-# Event scan search templates categorized by focus
+# Event scan search templates categorized by focus (covers all Travel Scout categories)
 EVENT_SCAN_QUERIES: Dict[str, Dict[str, Any]] = {
     "press": {
         "label": "Local Alt-Weeklies & Newspapers",
+        "icon": "📰",
         "category": "press",
         "channel": "press",
         "queries": [
@@ -77,6 +79,7 @@ EVENT_SCAN_QUERIES: Dict[str, Dict[str, Any]] = {
     },
     "movies": {
         "label": "Film Festivals & Cinema",
+        "icon": "🎬",
         "category": "movies",
         "channel": "movies",
         "queries": [
@@ -87,6 +90,7 @@ EVENT_SCAN_QUERIES: Dict[str, Dict[str, Any]] = {
     },
     "music": {
         "label": "Live Music & Concerts",
+        "icon": "🎶",
         "category": "music",
         "channel": "music",
         "queries": [
@@ -96,17 +100,74 @@ EVENT_SCAN_QUERIES: Dict[str, Dict[str, Any]] = {
         ]
     },
     "records": {
-        "label": "Record Stores & In-Store Performances",
+        "label": "Record Stores & In-Store Gigs",
+        "icon": "📻",
         "category": "records",
         "channel": "records",
         "queries": [
             "record store in-store live performance gig",
             "independent vinyl record shops live music sessions",
-            "record store vinyl pop-up and DJ sets"
+            "best record stores used vinyl crate digging rare LPs"
+        ]
+    },
+    "vintage-fashion": {
+        "label": "Vintage Clothing & Archival Fashion",
+        "icon": "🧥",
+        "category": "vintage-fashion",
+        "channel": "vintage-fashion",
+        "queries": [
+            "vintage clothing stores",
+            "curated vintage fashion boutique",
+            "best thrift and vintage clothing"
+        ]
+    },
+    "vintage-gear": {
+        "label": "Vintage Guitars & Musical Gear",
+        "icon": "🎸",
+        "category": "vintage-gear",
+        "channel": "vintage-gear",
+        "queries": [
+            "vintage guitars and guitar shop",
+            "vintage amps and musical instruments",
+            "used guitars and guitar store"
+        ]
+    },
+    "home-design": {
+        "label": "Vintage & Modern Home Design",
+        "icon": "🛋️",
+        "category": "home-design",
+        "channel": "home-design",
+        "queries": [
+            "mid century modern furniture design shop",
+            "vintage home decor and ceramics store",
+            "artisan ceramics modern design shop"
+        ]
+    },
+    "bookstores": {
+        "label": "Independent & Vintage Bookstores",
+        "icon": "📚",
+        "category": "bookstores",
+        "channel": "bookstores",
+        "queries": [
+            "best independent bookstores",
+            "vintage used bookstores",
+            "literary bookshop and cafe"
+        ]
+    },
+    "culinary-goods": {
+        "label": "Gourmet Kitchenware & Food Specialties",
+        "icon": "🔪",
+        "category": "culinary-goods",
+        "channel": "culinary-goods",
+        "queries": [
+            "gourmet kitchenware and cook shop",
+            "japanese knives and specialty food pantry",
+            "cookware store artisan spices"
         ]
     },
     "art": {
         "label": "Art Exhibits & Gallery Openings",
+        "icon": "🎨",
         "category": "art",
         "channel": "art",
         "queries": [
@@ -117,6 +178,7 @@ EVENT_SCAN_QUERIES: Dict[str, Dict[str, Any]] = {
     },
     "festivals": {
         "label": "Street Fairs & Outdoor Festivals",
+        "icon": "🎪",
         "category": "festivals",
         "channel": "festivals",
         "queries": [
@@ -127,6 +189,7 @@ EVENT_SCAN_QUERIES: Dict[str, Dict[str, Any]] = {
     },
     "markets": {
         "label": "Farmers Markets & Pop-ups",
+        "icon": "🥖",
         "category": "markets",
         "channel": "markets",
         "queries": [
@@ -137,6 +200,7 @@ EVENT_SCAN_QUERIES: Dict[str, Dict[str, Any]] = {
     },
     "free": {
         "label": "Free Admission & Community Events",
+        "icon": "🎟️",
         "category": "free",
         "channel": "events",
         "queries": [
@@ -145,14 +209,103 @@ EVENT_SCAN_QUERIES: Dict[str, Dict[str, Any]] = {
             "free admission cultural happenings open to the public"
         ]
     },
+    "dining": {
+        "label": "Iconic Dining & Taverns",
+        "icon": "🍽️",
+        "category": "dining",
+        "channel": "dining",
+        "queries": [
+            "iconic local dining traditional taverns tascas neighborhood eateries",
+            "essential restaurants historic dining spots local favorites",
+            "best local cuisine must eat traditional food"
+        ]
+    },
     "restaurants": {
         "label": "New Restaurants & Dining Pop-ups",
+        "icon": "🍽️",
         "category": "dining",
         "channel": "eater",
         "queries": [
             "essential new restaurants and culinary pop ups",
             "eater heatmap best new dining and food halls",
             "local food market stalls and neighborhood gems"
+        ]
+    },
+    "cocktails": {
+        "label": "Craft Cocktails & Secret Speakeasies",
+        "icon": "🍸",
+        "category": "cocktails",
+        "channel": "cocktails",
+        "queries": [
+            "hidden speakeasy bar secret entrance craft cocktails",
+            "best craft cocktail bars mixology speakeasy unmarked door",
+            "intimate speakeasy cocktail lounge historic cocktail bar"
+        ]
+    },
+    "beer": {
+        "label": "Breweries & Beer Tasting Rooms",
+        "icon": "🍺",
+        "category": "beer",
+        "channel": "breweries",
+        "queries": [
+            "craft brewery taproom craft beer tasting room",
+            "best microbreweries independent brewpub local beer",
+            "craft beer bar bottle shop and brewery tours"
+        ]
+    },
+    "wine": {
+        "label": "Wine Cellars & Lodges",
+        "icon": "🍷",
+        "category": "wine",
+        "channel": "guides",
+        "queries": [
+            "wine tasting cellars wine lodges vineyards",
+            "historic wine cellars natural wine bars and tastings",
+            "local winery tours and wine tasting rooms"
+        ]
+    },
+    "michelin": {
+        "label": "Michelin Star & Fine Dining",
+        "icon": "⭐",
+        "category": "michelin",
+        "channel": "michelin",
+        "queries": [
+            "michelin star restaurants fine dining tasting menu",
+            "michelin guide bib gourmand chef's table",
+            "exceptional culinary tasting experience top rated dining"
+        ]
+    },
+    "historic": {
+        "label": "Castles & Historic Sights",
+        "icon": "🏰",
+        "category": "historic",
+        "channel": "guides",
+        "queries": [
+            "historic castles palaces and fortress sights",
+            "ancient citadels historic monuments and architectural gems",
+            "unesco world heritage historic landmarks guided visits"
+        ]
+    },
+    "outdoors": {
+        "label": "Miradouros & Scenic Trails",
+        "icon": "🌊",
+        "category": "outdoors",
+        "channel": "guides",
+        "queries": [
+            "scenic viewpoints miradouros and panoramic views",
+            "walking trails coastal hikes and scenic nature walks",
+            "city parks botanical gardens and scenic waterfronts"
+        ]
+    },
+    "gems": {
+        "label": "Local Neighborhood Gems",
+        "icon": "💎",
+        "category": "gems",
+        "channel": "reddit",
+        "queries": [
+            "local neighborhood gems hidden spots secret places Reddit",
+            "off the beaten path local favorites and quiet corners",
+            "undiscovered local cultural gems and authentic spots"
         ]
     }
 }
@@ -211,6 +364,17 @@ def hunt_cultural_events(
 
     def _scan_category(cat_key: str) -> List[Dict[str, Any]]:
         cfg = EVENT_SCAN_QUERIES.get(cat_key)
+        if not cfg and cat_key in CATEGORIES:
+            cat_meta = CATEGORIES[cat_key]
+            cfg = {
+                "label": cat_meta.get("label", cat_key),
+                "category": cat_key,
+                "channel": cat_key if cat_key in CHANNEL_SITE_MODIFIERS else "all",
+                "queries": [
+                    f"best {cat_meta.get('label', cat_key)} in {city_name}",
+                    f"top {cat_key} local spots in {city_name}"
+                ]
+            }
         if not cfg:
             return []
         cat = cfg["category"]
@@ -240,7 +404,8 @@ def hunt_cultural_events(
                 print(f"Notice: Hunter failed for {city_name} on {cat_key} ('{q}'): {err}")
         return cat_hits
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    effective_workers = min(8, max(max_workers, len(types_to_scan)))
+    with ThreadPoolExecutor(max_workers=effective_workers) as executor:
         futures = {executor.submit(_scan_category, t): t for t in types_to_scan}
         for future in as_completed(futures):
             try:

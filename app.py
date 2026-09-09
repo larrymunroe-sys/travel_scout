@@ -2271,7 +2271,10 @@ async def run_trip_local_cultural_scout(
     return {
         "status": "success",
         "trip_id": trip_id,
+        "total_cities_scanned": len(segments),
+        "total_newly_discovered": total_discovered,
         "total_discovered": total_discovered,
+        "city_summaries": results,
         "results": results
     }
 

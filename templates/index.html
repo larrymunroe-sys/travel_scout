@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="/static/styles.css?v=4.4" />
+  <link rel="stylesheet" href="/static/styles.css?v=4.5" />
   <link rel="manifest" href="/static/manifest.json" />
   <meta name="theme-color" content="#0284c7" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -1074,43 +1074,13 @@
               <a href="#" id="agentDeselectAllBtn" style="color: var(--text-muted); text-decoration: none;">Clear</a>
             </div>
           </div>
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.6rem;">
-            <label class="agent-check-label" style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-main); padding:0.5rem 0.75rem; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:0.85rem; cursor:pointer;">
-              <input type="checkbox" name="agent_event_type" value="press" checked style="accent-color:#38bdf8;">
-              <span>📰 Local Alt-Weeklies & Newspapers</span>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.6rem; max-height: 280px; overflow-y: auto; padding-right: 4px;" id="localAgentCategoryGrid">
+            {% for key, val in event_scan_queries.items() %}
+            <label class="agent-check-label" for="agent_type_{{ key }}" style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-main); padding:0.5rem 0.75rem; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:0.85rem; cursor:pointer;">
+              <input type="checkbox" id="agent_type_{{ key }}" name="agent_event_type" value="{{ key }}" checked style="accent-color:#38bdf8;">
+              <span>{{ val.icon }} {{ val.label }}</span>
             </label>
-            <label class="agent-check-label" style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-main); padding:0.5rem 0.75rem; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:0.85rem; cursor:pointer;">
-              <input type="checkbox" name="agent_event_type" value="movies" checked style="accent-color:#38bdf8;">
-              <span>🎬 Film Festivals & Open-Air Cinema</span>
-            </label>
-            <label class="agent-check-label" style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-main); padding:0.5rem 0.75rem; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:0.85rem; cursor:pointer;">
-              <input type="checkbox" name="agent_event_type" value="music" checked style="accent-color:#38bdf8;">
-              <span>🎶 Live Music, Gigs & Concerts</span>
-            </label>
-            <label class="agent-check-label" style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-main); padding:0.5rem 0.75rem; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:0.85rem; cursor:pointer;">
-              <input type="checkbox" name="agent_event_type" value="records" checked style="accent-color:#38bdf8;">
-              <span>📻 Record Stores & In-Store Gigs</span>
-            </label>
-            <label class="agent-check-label" style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-main); padding:0.5rem 0.75rem; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:0.85rem; cursor:pointer;">
-              <input type="checkbox" name="agent_event_type" value="art" checked style="accent-color:#38bdf8;">
-              <span>🎨 Art Exhibits & Gallery Openings</span>
-            </label>
-            <label class="agent-check-label" style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-main); padding:0.5rem 0.75rem; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:0.85rem; cursor:pointer;">
-              <input type="checkbox" name="agent_event_type" value="festivals" checked style="accent-color:#38bdf8;">
-              <span>🎪 Free Outdoor Festivals & Street Fairs</span>
-            </label>
-            <label class="agent-check-label" style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-main); padding:0.5rem 0.75rem; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:0.85rem; cursor:pointer;">
-              <input type="checkbox" name="agent_event_type" value="markets" checked style="accent-color:#38bdf8;">
-              <span>🥖 Farmers Markets & Artisan Pop-ups</span>
-            </label>
-            <label class="agent-check-label" style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-main); padding:0.5rem 0.75rem; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:0.85rem; cursor:pointer;">
-              <input type="checkbox" name="agent_event_type" value="free" checked style="accent-color:#38bdf8;">
-              <span>🎟️ Free Admission & Community Events</span>
-            </label>
-            <label class="agent-check-label" style="display:flex; align-items:center; gap:0.5rem; background:var(--bg-main); padding:0.5rem 0.75rem; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:0.85rem; cursor:pointer;">
-              <input type="checkbox" name="agent_event_type" value="restaurants" checked style="accent-color:#38bdf8;">
-              <span>🍽️ New Restaurants & Food Pop-ups</span>
-            </label>
+            {% endfor %}
           </div>
         </div>
 
@@ -1371,7 +1341,7 @@
   </footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/app.js?v=4.4" onerror="console.warn('app.js load error, purging service worker cache...');if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(function(regs){for(var r of regs){r.unregister();}window.location.reload();});}"></script>
+  <script src="/static/app.js?v=4.5" onerror="console.warn('app.js load error, purging service worker cache...');if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(function(regs){for(var r of regs){r.unregister();}window.location.reload();});}"></script>
 </body>
 </html>
 
