@@ -82,6 +82,13 @@ def live_city_search(
                     except Exception as clean_err:
                         print(f"Clean query search error for '{full_query}': {clean_err}")
                         raw_results = []
+
+                if not raw_results and len(query.split()) > 2:
+                    short_q = " ".join(query.split()[:3])
+                    try:
+                        raw_results = list(ddgs.text(f"{city_name} {short_q}", max_results=max_results))
+                    except Exception:
+                        pass
     except Exception as e:
         print(f"DuckDuckGo search error: {e}")
         return []

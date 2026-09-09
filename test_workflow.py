@@ -143,6 +143,7 @@ class WorkflowTestRunner:
         self.assert_test("Header Share & Invite button (#openInviteBtn) present", 'id="openInviteBtn"' in html)
         self.assert_test("Header Manage Users button (#openManageUsersBtn) present", 'id="openManageUsersBtn"' in html)
         self.assert_test("Header Print button (#openPrintHeaderBtn) present", 'id="openPrintHeaderBtn"' in html)
+        self.assert_test("Header Backup & Restore button (#openBackupBtn) present", 'id="openBackupBtn"' in html)
         self.assert_test("Header Add Custom Item button (#openAddItemHeaderBtn) present", 'id="openAddItemHeaderBtn"' in html)
 
         # 2. Modals Presence
@@ -152,6 +153,7 @@ class WorkflowTestRunner:
         self.assert_test("Invite modal (#inviteModal) present", 'id="inviteModal"' in html)
         self.assert_test("Manage Users modal (#manageUsersModal) present", 'id="manageUsersModal"' in html)
         self.assert_test("Print modal (#printModal) present", 'id="printModal"' in html)
+        self.assert_test("Backup modal (#backupModal) present", 'id="backupModal"' in html)
         self.assert_test("Add Custom Item modal (#addItemModal) present", 'id="addItemModal"' in html)
         self.assert_test("Login modal (#loginModal) present", 'id="loginModal"' in html)
 
@@ -187,11 +189,11 @@ class WorkflowTestRunner:
 
         # 5. Cache Invalidation Version Bumps
         if self.mode == "LIVE_HTTP":
-            self.assert_test("styles.css has fresh cache version", 'styles.css?v=4.5' in html or 'styles.css?v=4.4' in html)
-            self.assert_test("app.js has fresh cache version", 'app.js?v=4.5' in html or 'app.js?v=4.4' in html)
+            self.assert_test("styles.css has fresh cache version", 'styles.css?v=4.6' in html or 'styles.css?v=4.5' in html)
+            self.assert_test("app.js has fresh cache version", 'app.js?v=4.6' in html or 'app.js?v=4.5' in html)
         else:
-            self.assert_test("styles.css has cache version ?v=4.5", 'styles.css?v=4.5' in html or 'styles.css?v=4.4' in html)
-            self.assert_test("app.js has cache version ?v=4.5", 'app.js?v=4.5' in html or 'app.js?v=4.4' in html)
+            self.assert_test("styles.css has cache version ?v=4.6", 'styles.css?v=4.6' in html or 'styles.css?v=4.5' in html)
+            self.assert_test("app.js has cache version ?v=4.6", 'app.js?v=4.6' in html or 'app.js?v=4.5' in html)
 
         # 6. Service Worker headers
         sw_res = self._request("GET", "/sw.js")
@@ -207,7 +209,7 @@ class WorkflowTestRunner:
             self.assert_test("Service Worker has no-cache header", "no-cache" in cache_control.lower())
         self.assert_test(
             "Service Worker contains current CACHE_NAME",
-            "travel-scout-v4.5" in sw_res.text or "travel-scout-v4.4" in sw_res.text
+            "travel-scout-v4.6" in sw_res.text or "travel-scout-v4.5" in sw_res.text
         )
 
         # 7. Favicon endpoint
@@ -512,6 +514,28 @@ class WorkflowTestRunner:
         self.assert_test("Deleted item is no longer in trip items", self.created_item_id not in remaining_ids)
 
     # --------------------------------------------------------------------------
+    # WORKFLOW 8: Pre-Refresh Itinerary Backup, Download & Reimport
+    # --------------------------------------------------------------------------
+    def test_workflow_8_backup_and_restore(self):
+        self.log_step("Workflow 8: Pre-Refresh Itinerary Backup, Download & Reimport")
+
+        # 1. Check backup status
+        res_stat = self._request("GET", "/api/backup/status")
+        self.assert_test("GET /api/backup/status returns 200 OK", res_stat.status_code == 200)
+        stat_data = res_stat.json() if res_stat.status_code == 200 else {}
+        self.assert_test("Backup status reports ready status", stat_data.get("status") in ("ready", "no_backup"))
+        self.assert_test("Backup reports valid total_trips count", isinstance(stat_data.get("total_trips"), int) and stat_data.get("total_trips", 0) >= 1)
+
+        # 2. Download JSON backup
+        res_dl = self._request("GET", "/api/backup/download")
+        self.assert_test("GET /api/backup/download returns 200 OK", res_dl.status_code == 200)
+        self.assert_test("Backup download content-type is application/json", "application/json" in res_dl.headers.get("content-type", ""))
+        import json
+        dl_json = json.loads(res_dl.text) if res_dl.status_code == 200 else {}
+        self.assert_test("Backup download contains 'trips' list", isinstance(dl_json.get("trips"), list))
+        self.assert_test("Backup download captures current trip count", len(dl_json.get("trips", [])) >= 1)
+
+    # --------------------------------------------------------------------------
     # TEARDOWN: Automated Database Cleanup
     # --------------------------------------------------------------------------
     def teardown(self):
@@ -565,6 +589,7 @@ class WorkflowTestRunner:
             self.test_workflow_5_manage_users()
             self.test_workflow_6_print_and_export()
             self.test_workflow_7_add_custom_item()
+            self.test_workflow_8_backup_and_restore()
         except Exception as exc:
             import traceback
             print(f"\n{RED}{BOLD}UNEXPECTED EXCEPTION DURING TEST EXECUTION:{RESET}")

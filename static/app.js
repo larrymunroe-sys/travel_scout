@@ -319,19 +319,40 @@ async function initApp() {
     window.history.replaceState({}, document.title, window.location.pathname);
   }
 
-  // Register PWA Service Worker
+  // Register PWA Service Worker with pre-refresh auto-backup protection
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js")
       .then(reg => {
         console.log("Travel Scout Service Worker active:", reg.scope);
         reg.update().catch(() => {});
+        reg.addEventListener("updatefound", () => {
+          const newWorker = reg.installing;
+          if (newWorker) {
+            newWorker.addEventListener("statechange", () => {
+              if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+                // Pre-refresh auto-save: snapshot database before user accepts refresh
+                fetch("/api/backup/now", { method: "POST", headers: getAuthHeaders(), credentials: "include" }).catch(() => {});
+              }
+            });
+          }
+        });
       })
       .catch(err => console.log("Service Worker registration skipped:", err));
   }
 
+  // Preserve active trip across page refreshes
+  window.addEventListener("beforeunload", () => {
+    try {
+      if (currentTripId) {
+        localStorage.setItem("travel_scout_last_active_trip", currentTripId);
+      }
+    } catch (e) {}
+  });
+
   try { initTabs(); } catch (e) { console.error("initTabs error:", e); }
   try { initModals(); } catch (e) { console.error("initModals error:", e); }
   try { initAddItemModal(); } catch (e) { console.error("initAddItemModal error:", e); }
+  try { initBackupModal(); } catch (e) { console.error("initBackupModal error:", e); }
   try { initExpenseTracker(); } catch (e) { console.error("initExpenseTracker error:", e); }
   try { initBookingModal(); } catch (e) { console.error("initBookingModal error:", e); }
   try { initCalendarExport(); } catch (e) { console.error("initCalendarExport error:", e); }
@@ -3083,27 +3104,27 @@ function initScout() {
   const dailyBtn = document.getElementById("runMultiDailyScanBtn");
 
   const CATEGORY_DEFAULT_QUERIES = {
-    "bookstores": "best independent bookstores vintage used books rare editions",
-    "vintage-fashion": "best vintage clothing stores curated thrift boutique archival fashion",
-    "vintage-gear": "vintage guitars and tube amps guitar shop used instruments",
-    "home-design": "mid century modern furniture vintage home decor design shop",
-    "culinary-goods": "culinary store gourmet kitchenware japanese knives cook shop",
-    "records": "best record stores vinyl shop crate digging used records",
-    "cocktails": "hidden speakeasy bar secret entrance craft cocktails",
-    "beer": "craft breweries and beer tasting rooms taproom microbrewery",
-    "michelin": "michelin star restaurants fine dining tasting menu",
-    "wine": "wine cellars tasting lodges and vineyards",
-    "music": "live music concerts gig guide tickets and venues",
-    "art": "art exhibits contemporary galleries and museum exhibitions",
-    "movies": "film festivals indie cinema and open air screenings",
-    "festivals": "street fairs outdoor festivals and cultural carnivals",
-    "markets": "farmers markets flea markets and artisan popups",
-    "press": "alternative weekly arts and culture guide local gazette",
-    "historic": "historic sights castles palaces and citadels",
-    "outdoors": "scenic miradouros walking trails and viewpoints",
-    "gems": "hidden gems local favorites and secret spots",
-    "free": "free admission events and open public happenings",
-    "dining": "iconic local restaurants taverns and food spots"
+    "bookstores": "independent bookstores",
+    "vintage-fashion": "vintage clothing boutique",
+    "vintage-gear": "vintage guitars instruments",
+    "home-design": "modern furniture design",
+    "culinary-goods": "culinary kitchenware knives",
+    "records": "vinyl record stores",
+    "cocktails": "craft cocktail bars",
+    "beer": "craft breweries taproom",
+    "michelin": "michelin star restaurants",
+    "wine": "wine tastings cellars",
+    "music": "live music concerts",
+    "art": "art exhibits galleries",
+    "movies": "indie cinema film festivals",
+    "festivals": "street fairs outdoor festivals",
+    "markets": "farmers markets popups",
+    "press": "alternative weekly culture guide",
+    "historic": "historic sights castles",
+    "outdoors": "scenic viewpoints miradouros",
+    "gems": "hidden gems secret spots",
+    "free": "free admission events",
+    "dining": "iconic local restaurants"
   };
 
   if (catSelect && queryInput) {
@@ -3139,6 +3160,9 @@ function initScout() {
         return;
       }
 
+      btn.disabled = true;
+      const originalBtnText = btn.textContent;
+      btn.textContent = `⏳ Scouting ${city}...`;
       loading.style.display = "block";
       grid.innerHTML = "";
 
@@ -3154,11 +3178,17 @@ function initScout() {
             category: selectedCat || null
           })
         });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || `Search returned error status ${res.status}`);
+        }
+
         const data = await res.json();
         loading.style.display = "none";
 
-        if (data.results.length === 0) {
-          grid.innerHTML = `<p style="grid-column:1/-1; text-align:center; color:var(--text-muted); padding:2rem;">No live web results returned for '${escapeHtml(q)}'. Try other keywords.</p>`;
+        if (!data || !Array.isArray(data.results) || data.results.length === 0) {
+          grid.innerHTML = `<p style="grid-column:1/-1; text-align:center; color:var(--text-muted); padding:2rem;">No live web results returned for '${escapeHtml(q)}'. Try broader keywords or select another category.</p>`;
         } else {
           window._lastSearchResults = data.results;
           grid.innerHTML = data.results.map((r, idx) => {
@@ -3219,7 +3249,10 @@ function initScout() {
         }
       } catch (err) {
         loading.style.display = "none";
-        grid.innerHTML = `<p style="color:#f43f5e; text-align:center;">Error: ${err.message}</p>`;
+        grid.innerHTML = `<p style="color:#f43f5e; text-align:center;">Error: ${escapeHtml(err.message)}</p>`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalBtnText;
       }
     });
   }
@@ -4290,4 +4323,196 @@ function sanitizeUrl(rawUrl) {
     return "";
   }
 }
+
+// ==================== ITINERARY BACKUP, RESTORE & REIMPORT ====================
+
+window.openBackupModal = async function() {
+  const modal = document.getElementById("backupModal");
+  if (!modal) return;
+  document.querySelectorAll(".modal-overlay").forEach(m => m.style.display = "none");
+  modal.style.display = "flex";
+  modal.style.zIndex = "99999";
+  await refreshBackupStatus();
+};
+
+window.closeBackupModal = function() {
+  const modal = document.getElementById("backupModal");
+  if (modal) modal.style.display = "none";
+};
+
+async function refreshBackupStatus() {
+  const detailEl = document.getElementById("backupStatusDetail");
+  if (!detailEl) return;
+  try {
+    const res = await fetch("/api/backup/status", {
+      headers: getAuthHeaders(),
+      credentials: "include"
+    });
+    if (!res.ok) throw new Error("Status check failed");
+    const data = await res.json();
+    const sizeKb = data.backup_size_bytes ? (data.backup_size_bytes / 1024).toFixed(1) + " KB" : "0 KB";
+    const timeStr = data.last_backup_time ? new Date(data.last_backup_time).toLocaleString() : "None yet";
+    detailEl.innerHTML = `
+      <span>Status: <strong style="color:#4ade80;">Ready</strong> &bull; Total Trips: <strong>${data.total_trips}</strong> &bull; File Size: <strong>${sizeKb}</strong></span><br/>
+      <span>Last Server Backup: <strong>${timeStr}</strong> &bull; Snapshots in History: <strong>${data.historical_snapshots_count}</strong></span>
+    `;
+  } catch (err) {
+    detailEl.textContent = "Backup system active. Ready to save or reimport.";
+  }
+}
+
+function showBackupFeedback(message, isSuccess = true) {
+  const box = document.getElementById("backupFeedbackBox");
+  const text = document.getElementById("backupFeedbackText");
+  if (!box || !text) return;
+  box.style.display = "block";
+  box.style.background = isSuccess ? "rgba(34, 197, 94, 0.12)" : "rgba(244, 63, 94, 0.12)";
+  box.style.border = isSuccess ? "1px solid rgba(34, 197, 94, 0.35)" : "1px solid rgba(244, 63, 94, 0.35)";
+  box.style.color = isSuccess ? "#4ade80" : "#fca5a5";
+  text.textContent = message;
+}
+
+function initBackupModal() {
+  const openBtn = document.getElementById("openBackupBtn");
+  const closeBtn = document.getElementById("closeBackupModalBtn");
+  const closeBtn2 = document.getElementById("closeBackupModalBtn2");
+  const refreshBtn = document.getElementById("refreshBackupStatusBtn");
+  const downloadBtn = document.getElementById("downloadBackupBtn");
+  const snapshotBtn = document.getElementById("saveServerSnapshotBtn");
+  const fileInput = document.getElementById("backupFileInput");
+  const uploadBtn = document.getElementById("uploadBackupBtn");
+  const restoreBtn = document.getElementById("restoreServerBackupBtn");
+
+  if (openBtn) openBtn.onclick = () => window.openBackupModal();
+  if (closeBtn) closeBtn.onclick = () => window.closeBackupModal();
+  if (closeBtn2) closeBtn2.onclick = () => window.closeBackupModal();
+  if (refreshBtn) refreshBtn.onclick = () => refreshBackupStatus();
+
+  if (downloadBtn) {
+    downloadBtn.onclick = async () => {
+      downloadBtn.disabled = true;
+      const prevText = downloadBtn.textContent;
+      downloadBtn.textContent = "⏳ Preparing Download...";
+      try {
+        const res = await fetch("/api/backup/download", {
+          headers: getAuthHeaders(),
+          credentials: "include"
+        });
+        if (!res.ok) throw new Error("Failed to download backup");
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        const nowStr = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+        a.download = `travel_scout_backup_${nowStr}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        showBackupFeedback("✓ Complete itinerary backup downloaded successfully to your computer!", true);
+        await refreshBackupStatus();
+      } catch (err) {
+        showBackupFeedback("Download error: " + err.message, false);
+      } finally {
+        downloadBtn.disabled = false;
+        downloadBtn.textContent = prevText;
+      }
+    };
+  }
+
+  if (snapshotBtn) {
+    snapshotBtn.onclick = async () => {
+      snapshotBtn.disabled = true;
+      const prevText = snapshotBtn.textContent;
+      snapshotBtn.textContent = "⏳ Saving...";
+      try {
+        const res = await fetch("/api/backup/now", {
+          method: "POST",
+          headers: getAuthHeaders(),
+          credentials: "include"
+        });
+        const data = await res.json();
+        showBackupFeedback(`✓ Server snapshot created with ${data.total_trips} trips!`, true);
+        await refreshBackupStatus();
+      } catch (err) {
+        showBackupFeedback("Snapshot error: " + err.message, false);
+      } finally {
+        snapshotBtn.disabled = false;
+        snapshotBtn.textContent = prevText;
+      }
+    };
+  }
+
+  if (fileInput && uploadBtn) {
+    fileInput.onchange = () => {
+      uploadBtn.disabled = !fileInput.files || fileInput.files.length === 0;
+    };
+
+    uploadBtn.onclick = async () => {
+      if (!fileInput.files || fileInput.files.length === 0) return;
+      const file = fileInput.files[0];
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = "⏳ Reimporting Itineraries...";
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await fetch("/api/backup/upload", {
+          method: "POST",
+          headers: getAuthHeaders(),
+          credentials: "include",
+          body: formData
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || `Upload failed with status ${res.status}`);
+        }
+        const data = await res.json();
+        showBackupFeedback(
+          `✓ Success! Restored ${data.restored_trips || 0} trips and ${data.restored_items || 0} items (preserved ${data.skipped_deleted_items || 0} deleted items).`,
+          true
+        );
+        fileInput.value = "";
+        uploadBtn.disabled = true;
+        await refreshBackupStatus();
+        if (typeof loadTripsDropdown === "function") await loadTripsDropdown();
+        if (typeof refreshTrip === "function") await refreshTrip();
+      } catch (err) {
+        showBackupFeedback("Reimport error: " + err.message, false);
+      } finally {
+        uploadBtn.textContent = "📤 Reimport Itineraries from File";
+      }
+    };
+  }
+
+  if (restoreBtn) {
+    restoreBtn.onclick = async () => {
+      if (!confirm("Sync and restore all itineraries from the server backup snapshot?")) return;
+      restoreBtn.disabled = true;
+      const prevText = restoreBtn.textContent;
+      restoreBtn.textContent = "⏳ Restoring...";
+      try {
+        const res = await fetch("/api/backup/restore", {
+          method: "POST",
+          headers: getAuthHeaders(),
+          credentials: "include"
+        });
+        if (!res.ok) throw new Error("Restore failed");
+        const data = await res.json();
+        showBackupFeedback(
+          `✓ Server restore complete: ${data.restored_trips || 0} trips, ${data.restored_items || 0} items re-synced!`,
+          true
+        );
+        await refreshBackupStatus();
+        if (typeof loadTripsDropdown === "function") await loadTripsDropdown();
+        if (typeof refreshTrip === "function") await refreshTrip();
+      } catch (err) {
+        showBackupFeedback("Restore error: " + err.message, false);
+      } finally {
+        restoreBtn.disabled = false;
+        restoreBtn.textContent = prevText;
+      }
+    };
+  }
+}
+
 

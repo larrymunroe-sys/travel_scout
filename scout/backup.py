@@ -330,34 +330,47 @@ def backup_itineraries(
 def restore_itineraries(
     db: Session,
     backup_file: Optional[Path] = None,
-    sync_mode: bool = True
+    sync_mode: bool = True,
+    backup_data: Optional[Dict[str, Any]] = None,
+    target_user_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Restore and sync itineraries from JSON backup.
+    Restore and sync itineraries from JSON backup file or raw backup dictionary.
     
     If sync_mode is True:
     - Restores missing trips and cities.
     - If a card was deleted in the current trip or in backup's deleted_items,
       it is NOT re-imported unless its information (hash) has changed!
     """
-    source_path = backup_file or DEFAULT_BACKUP_FILE
-    if not source_path.exists():
-        return {"status": "skipped", "message": "No backup file found"}
+    if backup_data is not None:
+        data = backup_data
+    else:
+        source_path = backup_file or DEFAULT_BACKUP_FILE
+        if not source_path.exists():
+            return {"status": "skipped", "message": "No backup file found"}
 
-    try:
-        with open(source_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception as err:
-        return {"status": "error", "message": f"Failed to read backup file: {err}"}
+        try:
+            with open(source_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as err:
+            return {"status": "error", "message": f"Failed to read backup file: {err}"}
 
     trips_data = data.get("trips", [])
     restored_trips = 0
     restored_items = 0
     skipped_deleted_items = 0
 
+    # Ensure at least one valid user exists for foreign key references
+    fallback_user = db.query(User).first()
+
     for t_data in trips_data:
         trip_id = t_data["id"]
         trip = db.query(Trip).filter(Trip.id == trip_id).first()
+
+        # Resolve valid owner
+        raw_owner_id = t_data.get("owner_id")
+        owner_exists = db.query(User).filter(User.id == raw_owner_id).first() if raw_owner_id else None
+        resolved_owner_id = owner_exists.id if owner_exists else (target_user_id or (fallback_user.id if fallback_user else raw_owner_id))
 
         # 1. Create trip if it doesn't exist
         if not trip:
@@ -365,12 +378,22 @@ def restore_itineraries(
                 id=trip_id,
                 title=t_data["title"],
                 description=t_data.get("description"),
-                owner_id=t_data["owner_id"]
+                owner_id=resolved_owner_id
             )
             db.add(trip)
             db.commit()
             db.refresh(trip)
             restored_trips += 1
+
+        # If importing on behalf of target_user_id, ensure they are collaborator/owner
+        if target_user_id and target_user_id != trip.owner_id:
+            has_collab = db.query(TripCollaborator).filter(
+                TripCollaborator.trip_id == trip.id,
+                TripCollaborator.user_id == target_user_id
+            ).first()
+            if not has_collab:
+                db.add(TripCollaborator(trip_id=trip.id, user_id=target_user_id, role="editor"))
+                db.commit()
 
         # 2. Sync Collaborators
         existing_collabs = {c.user_id for c in trip.collaborators}

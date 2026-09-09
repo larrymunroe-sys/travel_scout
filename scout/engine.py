@@ -478,78 +478,103 @@ class ScoutEngine:
         return True
 
     def run_multi_city_daily_scan(self, db: Session, trip_id: str, user_id: str) -> Dict[str, Any]:
-        """Perform autonomous multi-channel scan across all cities in the trip."""
+        """Perform autonomous multi-channel scan across all cities in the trip with parallelized execution."""
+        import concurrent.futures
+
         cities = db.query(CitySegment).filter(CitySegment.trip_id == trip_id).all()
         all_new_items = []
 
         scan_templates = [
-            ("live music concerts gig guide tickets and venues", "music", "music"),
-            ("craft breweries and beer tasting rooms", "beer", "breweries"),
-            ("craft cocktail bars and secret speakeasies", "cocktails", "cocktails"),
-            ("michelin star restaurants and fine dining", "michelin", "michelin"),
-            ("top wine tastings and cellars", "wine", "guides"),
-            ("best independent bookstores vintage used books rare editions", "bookstores", "bookstores"),
-            ("best vintage clothing stores curated thrift boutique archival fashion", "vintage-fashion", "vintage-fashion"),
-            ("best record stores vinyl shop crate digging used records", "records", "records"),
-            ("vintage guitars and tube amps guitar shop used instruments", "vintage-gear", "vintage-gear"),
-            ("mid century modern furniture vintage home decor design shop", "home-design", "home-design"),
-            ("culinary store gourmet kitchenware japanese knives cook shop", "culinary-goods", "culinary-goods"),
-            ("eater heatmap essential restaurants", "dining", "eater"),
-            ("yelp best rated local dining and hidden spots", "dining", "yelp"),
-            ("city magazine best of dining and nightlife guide", "gems", "magazines"),
-            ("hidden gems and secret viewpoints Reddit", "gems", "reddit"),
-            ("art exhibits contemporary galleries and museum exhibitions", "art", "art"),
-            ("farmers markets and artisan food popups", "markets", "markets"),
-            ("new restaurant openings and food finds", "dining", "blogs"),
-            ("viral food and must visit spots", "dining", "tiktok"),
+            ("live music concerts", "music", "music"),
+            ("craft breweries taproom", "beer", "breweries"),
+            ("craft cocktail bars", "cocktails", "cocktails"),
+            ("michelin star dining", "michelin", "michelin"),
+            ("wine tastings cellars", "wine", "guides"),
+            ("independent bookstores", "bookstores", "bookstores"),
+            ("vintage clothing boutique", "vintage-fashion", "vintage-fashion"),
+            ("vinyl record stores", "records", "records"),
+            ("vintage guitars instruments", "vintage-gear", "vintage-gear"),
+            ("mid century modern design", "home-design", "home-design"),
+            ("culinary kitchenware knives", "culinary-goods", "culinary-goods"),
+            ("essential restaurants", "dining", "eater"),
+            ("hidden gems secret spots", "gems", "gems"),
+            ("art exhibits galleries", "art", "art"),
+            ("farmers markets popups", "markets", "markets"),
+            ("new restaurant openings", "dining", "blogs"),
+            ("historic sights castles", "historic", "guides"),
+            ("scenic viewpoints miradouros", "outdoors", "guides")
         ]
 
+        def _worker(city_obj, q, c_cat, ch):
+            try:
+                hits = live_city_search(city_obj.city_name, q, channel=ch, category_hint=c_cat, max_results=2)
+                if not hits:
+                    hits = live_city_search(city_obj.city_name, c_cat, channel="all", category_hint=c_cat, max_results=2)
+                return [(city_obj, hit) for hit in hits]
+            except Exception as e:
+                print(f"Error scanning {city_obj.city_name} for '{q}': {e}")
+                return []
+
+        tasks = []
         for city in cities:
             for query, cat, channel in scan_templates:
-                try:
-                    found = live_city_search(city.city_name, query, channel=channel, category_hint=cat, max_results=2)
-                    for f in found:
-                        # Check if already in DB
-                        exists = db.query(ItineraryItem).filter(
-                            ItineraryItem.trip_id == trip_id,
-                            ItineraryItem.title == f["title"]
-                        ).first()
-                        if not exists:
-                            cand_hash = compute_item_hash(
-                                title=f["title"],
-                                description=f.get("description"),
-                                highlight=f.get("highlight"),
-                                address=f.get("address"),
-                                cost=f.get("cost"),
-                                time_info=f.get("time_info"),
-                                url=f.get("url")
-                            )
-                            if is_item_deleted_and_unchanged(db, trip_id, f["title"], cand_hash):
-                                continue
+                tasks.append((city, query, cat, channel))
 
-                            item = ItineraryItem(
-                                trip_id=trip_id,
-                                city_segment_id=city.id,
-                                title=f["title"],
-                                category=f["category"],
-                                neighborhood=f["neighborhood"],
-                                address=f["address"],
-                                lat=f["lat"],
-                                lon=f["lon"],
-                                cost=f["cost"],
-                                is_free=f["is_free"],
-                                time_info=f["time_info"],
-                                highlight=f["highlight"],
-                                description=f["description"],
-                                url=f["url"],
-                                source_platform=f["source_platform"],
-                                assigned_date="todo",
-                                added_by_user_id=user_id
-                            )
-                            db.add(item)
-                            all_new_items.append(f)
-                except Exception as e:
-                    print(f"Error scanning {city.city_name} for '{query}': {e}")
+        max_workers = min(6, max(2, len(tasks)))
+        gathered_results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_task = {
+                executor.submit(_worker, c, q, cat, ch): (c, q)
+                for (c, q, cat, ch) in tasks
+            }
+            for future in concurrent.futures.as_completed(future_to_task):
+                try:
+                    res = future.result()
+                    if res:
+                        gathered_results.extend(res)
+                except Exception as ex:
+                    print("Daily scan task failed:", ex)
+
+        # Ingest gathered results into database safely in main thread
+        for city, f in gathered_results:
+            exists = db.query(ItineraryItem).filter(
+                ItineraryItem.trip_id == trip_id,
+                ItineraryItem.title == f["title"]
+            ).first()
+            if not exists:
+                cand_hash = compute_item_hash(
+                    title=f["title"],
+                    description=f.get("description"),
+                    highlight=f.get("highlight"),
+                    address=f.get("address"),
+                    cost=f.get("cost"),
+                    time_info=f.get("time_info"),
+                    url=f.get("url")
+                )
+                if is_item_deleted_and_unchanged(db, trip_id, f["title"], cand_hash):
+                    continue
+
+                item = ItineraryItem(
+                    trip_id=trip_id,
+                    city_segment_id=city.id,
+                    title=f["title"],
+                    category=f.get("category", "gems"),
+                    neighborhood=f.get("neighborhood"),
+                    address=f.get("address"),
+                    lat=f.get("lat"),
+                    lon=f.get("lon"),
+                    cost=f.get("cost"),
+                    is_free=f.get("is_free", False),
+                    time_info=f.get("time_info"),
+                    highlight=f.get("highlight"),
+                    description=f.get("description"),
+                    url=f.get("url"),
+                    source_platform=f.get("source_platform", "Web"),
+                    assigned_date="todo",
+                    added_by_user_id=user_id
+                )
+                db.add(item)
+                all_new_items.append(f)
 
         db.commit()
         if all_new_items:

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 
-from fastapi import FastAPI, Depends, Request, Response, HTTPException, status
+from fastapi import FastAPI, Depends, Request, Response, HTTPException, status, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -1843,8 +1843,9 @@ async def remove_collaborator(
 # ==================== CITY-SCOPED LIVE SEARCH & DAILY SCAN ====================
 
 @app.post("/api/search")
-async def search_city(payload: SearchPayload, current_user: User = Depends(get_current_user)):
-    """Run live web scout scoped to the target city (requires authenticated user)."""
+async def search_city(payload: SearchPayload, request: Request, db: Session = Depends(get_db)):
+    """Run live web scout scoped to the target city (gracefully handles guests and authenticated users)."""
+    user = get_optional_current_user(request, db)
     results = live_city_search(
         city_name=payload.city_name,
         query=payload.query,
@@ -1857,7 +1858,8 @@ async def search_city(payload: SearchPayload, current_user: User = Depends(get_c
         "query": payload.query,
         "channel": payload.channel,
         "count": len(results),
-        "results": results
+        "results": results,
+        "is_guest": user is None
     }
 
 @app.post("/api/trips/{trip_id}/scan/daily")
@@ -2501,19 +2503,63 @@ async def get_backup_status(request: Request, db: Session = Depends(get_db)):
     }
 
 
+@app.get("/api/backup/download")
+async def download_itinerary_backup(request: Request, db: Session = Depends(get_db)):
+    """Download the current complete itinerary backup as a timestamped JSON file."""
+    user = get_optional_current_user(request, db)
+    # Perform fresh snapshot to ensure download is up-to-the-second
+    backup_itineraries(db, save_history=True)
+    if not DEFAULT_BACKUP_FILE.exists():
+        raise HTTPException(status_code=404, detail="No itinerary backup file available to download.")
+
+    ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    filename = f"travel_scout_backup_{ts}.json"
+    return FileResponse(
+        path=str(DEFAULT_BACKUP_FILE),
+        media_type="application/json",
+        filename=filename,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@app.post("/api/backup/upload")
+async def upload_itinerary_backup(
+    file: UploadFile = File(...),
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    """Upload and reimport an itinerary backup JSON file with deletion memory preservation."""
+    user = get_optional_current_user(request, db) if request else None
+    try:
+        content = await file.read()
+        import json
+        backup_dict = json.loads(content.decode("utf-8"))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON file format: {e}")
+
+    if not isinstance(backup_dict, dict) or "trips" not in backup_dict:
+        raise HTTPException(status_code=400, detail="Invalid Travel Scout backup format: 'trips' array expected.")
+
+    target_user_id = user.id if user else None
+    res = restore_itineraries(db, sync_mode=True, backup_data=backup_dict, target_user_id=target_user_id)
+    auto_backup_on_change(db)
+    return res
+
+
 @app.post("/api/backup/now")
 async def trigger_manual_backup(request: Request, db: Session = Depends(get_db)):
     """Trigger an immediate atomic backup of all itineraries, stays, items, and deletion memory."""
-    user = get_current_user(request, db)
+    user = get_optional_current_user(request, db)
     res = backup_itineraries(db, save_history=True)
     return res
 
 
 @app.post("/api/backup/restore")
 async def trigger_manual_restore(request: Request, db: Session = Depends(get_db)):
-    """Restore and sync itineraries from JSON backup while strictly preserving deletion memory."""
-    user = get_current_user(request, db)
-    res = restore_itineraries(db, sync_mode=True)
+    """Restore and sync itineraries from server JSON backup while strictly preserving deletion memory."""
+    user = get_optional_current_user(request, db)
+    target_user_id = user.id if user else None
+    res = restore_itineraries(db, sync_mode=True, target_user_id=target_user_id)
     return res
 
 
