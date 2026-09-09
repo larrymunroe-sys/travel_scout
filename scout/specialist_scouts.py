@@ -21,7 +21,7 @@ from scout.backup import compute_item_hash, is_item_deleted_and_unchanged, auto_
 SPECIALIST_AGENTS_CONFIG: Dict[str, Dict[str, Any]] = {
     "vintage-gear": {
         "name": "Vintage Music Instruments Scout",
-        "category": "gems",
+        "category": "vintage-gear",
         "icon": "🎸",
         "queries": [
             "vintage guitars and tube amps guitar shop",
@@ -34,7 +34,7 @@ SPECIALIST_AGENTS_CONFIG: Dict[str, Dict[str, Any]] = {
     },
     "vintage-fashion": {
         "name": "Vintage Clothing Stores Scout",
-        "category": "gems",
+        "category": "vintage-fashion",
         "icon": "🧥",
         "queries": [
             "best vintage clothing stores curated thrift boutique",
@@ -47,7 +47,7 @@ SPECIALIST_AGENTS_CONFIG: Dict[str, Dict[str, Any]] = {
     },
     "home-design": {
         "name": "Vintage & Modern Home Design Scout",
-        "category": "gems",
+        "category": "home-design",
         "icon": "🛋️",
         "queries": [
             "mid century modern furniture vintage home decor design shop",
@@ -60,7 +60,7 @@ SPECIALIST_AGENTS_CONFIG: Dict[str, Dict[str, Any]] = {
     },
     "culinary-goods": {
         "name": "Cooking & Food-Related Stores Scout",
-        "category": "dining",
+        "category": "culinary-goods",
         "icon": "🔪",
         "queries": [
             "culinary store gourmet kitchenware japanese knives cook shop",
@@ -86,7 +86,7 @@ SPECIALIST_AGENTS_CONFIG: Dict[str, Dict[str, Any]] = {
     },
     "speakeasy-cocktails": {
         "name": "Craft Cocktail Bars & Speakeasies Scout",
-        "category": "gems",
+        "category": "cocktails",
         "icon": "🍸",
         "queries": [
             "hidden speakeasy bar secret entrance craft cocktails",
@@ -99,7 +99,7 @@ SPECIALIST_AGENTS_CONFIG: Dict[str, Dict[str, Any]] = {
     },
     "bookstores": {
         "name": "Independent & Vintage Bookstores Scout",
-        "category": "gems",
+        "category": "bookstores",
         "icon": "📚",
         "queries": [
             "best independent bookstores vintage used books rare editions",

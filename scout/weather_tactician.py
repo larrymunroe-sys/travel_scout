@@ -18,7 +18,10 @@ OUTDOOR_KEYWORDS = [
     "plaza", "pier", "harbor", "zoo", "botanic", "courtyard", "open air"
 ]
 
-INDOOR_CATEGORIES = ["art", "museums", "records", "cafes", "dining", "press"]
+INDOOR_CATEGORIES = [
+    "art", "museums", "records", "cafes", "dining", "press",
+    "bookstores", "vintage-fashion", "vintage-gear", "home-design", "culinary-goods"
+]
 
 
 def generate_packing_checklist(

@@ -187,11 +187,11 @@ class WorkflowTestRunner:
 
         # 5. Cache Invalidation Version Bumps
         if self.mode == "LIVE_HTTP":
-            self.assert_test("styles.css has fresh cache version", 'styles.css?v=4.2' in html or 'styles.css?v=4.3' in html)
-            self.assert_test("app.js has fresh cache version", 'app.js?v=4.2' in html or 'app.js?v=4.3' in html)
+            self.assert_test("styles.css has fresh cache version", 'styles.css?v=4.4' in html or 'styles.css?v=4.3' in html)
+            self.assert_test("app.js has fresh cache version", 'app.js?v=4.4' in html or 'app.js?v=4.3' in html)
         else:
-            self.assert_test("styles.css has cache version ?v=4.3", 'styles.css?v=4.3' in html)
-            self.assert_test("app.js has cache version ?v=4.3", 'app.js?v=4.3' in html)
+            self.assert_test("styles.css has cache version ?v=4.4", 'styles.css?v=4.4' in html or 'styles.css?v=4.3' in html)
+            self.assert_test("app.js has cache version ?v=4.4", 'app.js?v=4.4' in html or 'app.js?v=4.3' in html)
 
         # 6. Service Worker headers
         sw_res = self._request("GET", "/sw.js")
@@ -207,7 +207,7 @@ class WorkflowTestRunner:
             self.assert_test("Service Worker has no-cache header", "no-cache" in cache_control.lower())
         self.assert_test(
             "Service Worker contains current CACHE_NAME",
-            "travel-scout-v4.3" in sw_res.text or "travel-scout-v4.2" in sw_res.text
+            "travel-scout-v4.4" in sw_res.text or "travel-scout-v4.3" in sw_res.text
         )
 
         # 7. Favicon endpoint

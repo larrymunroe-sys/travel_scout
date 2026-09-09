@@ -3082,11 +3082,62 @@ function initScout() {
   const grid = document.getElementById("scoutResultsGrid");
   const dailyBtn = document.getElementById("runMultiDailyScanBtn");
 
+  const CATEGORY_DEFAULT_QUERIES = {
+    "bookstores": "best independent bookstores vintage used books rare editions",
+    "vintage-fashion": "best vintage clothing stores curated thrift boutique archival fashion",
+    "vintage-gear": "vintage guitars and tube amps guitar shop used instruments",
+    "home-design": "mid century modern furniture vintage home decor design shop",
+    "culinary-goods": "culinary store gourmet kitchenware japanese knives cook shop",
+    "records": "best record stores vinyl shop crate digging used records",
+    "cocktails": "hidden speakeasy bar secret entrance craft cocktails",
+    "beer": "craft breweries and beer tasting rooms taproom microbrewery",
+    "michelin": "michelin star restaurants fine dining tasting menu",
+    "wine": "wine cellars tasting lodges and vineyards",
+    "music": "live music concerts gig guide tickets and venues",
+    "art": "art exhibits contemporary galleries and museum exhibitions",
+    "movies": "film festivals indie cinema and open air screenings",
+    "festivals": "street fairs outdoor festivals and cultural carnivals",
+    "markets": "farmers markets flea markets and artisan popups",
+    "press": "alternative weekly arts and culture guide local gazette",
+    "historic": "historic sights castles palaces and citadels",
+    "outdoors": "scenic miradouros walking trails and viewpoints",
+    "gems": "hidden gems local favorites and secret spots",
+    "free": "free admission events and open public happenings",
+    "dining": "iconic local restaurants taverns and food spots"
+  };
+
+  if (catSelect && queryInput) {
+    catSelect.addEventListener("change", () => {
+      const selectedCat = catSelect.value;
+      if (selectedCat && CATEGORY_DEFAULT_QUERIES[selectedCat]) {
+        const currVal = queryInput.value.trim();
+        if (!currVal || Object.values(CATEGORY_DEFAULT_QUERIES).includes(currVal)) {
+          queryInput.value = CATEGORY_DEFAULT_QUERIES[selectedCat];
+        }
+      }
+    });
+  }
+
   if (btn) {
     btn.addEventListener("click", async () => {
-      const q = queryInput.value.trim();
-      const city = citySelect.value;
-      if (!q) return;
+      let q = queryInput.value.trim();
+      const city = citySelect ? citySelect.value : "";
+      const selectedCat = catSelect ? catSelect.value : "";
+
+      if (!q) {
+        if (selectedCat && CATEGORY_DEFAULT_QUERIES[selectedCat]) {
+          q = CATEGORY_DEFAULT_QUERIES[selectedCat];
+          queryInput.value = q;
+        } else {
+          q = "top cultural highlights, hidden gems and local favorites";
+          queryInput.value = q;
+        }
+      }
+
+      if (!city) {
+        alert("Please select a destination city to scout.");
+        return;
+      }
 
       loading.style.display = "block";
       grid.innerHTML = "";
@@ -3099,8 +3150,8 @@ function initScout() {
           body: JSON.stringify({
             city_name: city,
             query: q,
-            channel: chSelect.value || "all",
-            category: catSelect.value || null
+            channel: chSelect ? (chSelect.value || "all") : "all",
+            category: selectedCat || null
           })
         });
         const data = await res.json();
@@ -3121,6 +3172,12 @@ function initScout() {
                 else if (/dice/i.test(r.source_platform)) pIcon = "🎲";
                 else if (/ticketmaster/i.test(r.source_platform)) pIcon = "🎫";
                 else if (/venue/i.test(r.source_platform)) pIcon = "🏛️";
+                else if (/record/i.test(r.source_platform)) pIcon = "📻";
+                else if (/bookstore|book/i.test(r.source_platform)) pIcon = "📚";
+                else if (/vintage clothing|fashion/i.test(r.source_platform)) pIcon = "🧥";
+                else if (/vintage gear|guitar/i.test(r.source_platform)) pIcon = "🎸";
+                else if (/home design/i.test(r.source_platform)) pIcon = "🛋️";
+                else if (/culinary/i.test(r.source_platform)) pIcon = "🔪";
                 else if (/yelp/i.test(r.source_platform)) pIcon = "⭐";
                 else if (/eater/i.test(r.source_platform)) pIcon = "🍴";
                 else if (/michelin/i.test(r.source_platform)) pIcon = "⭐";

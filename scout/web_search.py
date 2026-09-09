@@ -10,7 +10,12 @@ CHANNEL_SITE_MODIFIERS = {
     "press": "\"weekly newspaper\" OR \"alternative weekly\" OR \"city paper\" OR \"arts and culture\" OR \"events calendar\" OR site:timeout.com",
     "events": "site:eventbrite.com OR site:timeout.com OR \"events calendar\" OR \"what's on\" OR \"things to do this weekend\"",
     "music": "site:eventbrite.com OR site:songkick.com OR site:dice.fm OR site:ticketmaster.com",
-    "records": "\"record store\" OR \"vinyl shop\" OR \"in-store performance\" OR \"record shop\" live",
+    "records": "\"record store\" OR \"vinyl shop\" OR \"used records\" OR \"crate digging\" OR \"record shop\"",
+    "bookstores": "\"bookstore\" OR \"bookshop\" OR \"used books\" OR \"antiquarian books\" OR \"livraria\" OR \"independent bookstore\"",
+    "vintage-fashion": "\"vintage clothing\" OR \"vintage boutique\" OR \"curated thrift\" OR \"archival fashion\" OR \"vintage fashion\"",
+    "vintage-gear": "\"vintage guitar\" OR \"vintage amp\" OR \"guitar shop\" OR \"tube amp\" OR \"used guitar\" OR \"musical instruments\"",
+    "home-design": "\"mid century modern\" OR \"vintage furniture\" OR \"home design\" OR \"artisan ceramics\" OR \"modernist design\"",
+    "culinary-goods": "\"kitchenware\" OR \"cookware\" OR \"japanese knives\" OR \"gourmet pantry\" OR \"culinary store\" OR \"spice merchant\"",
     "art": "\"art exhibit\" OR \"gallery opening\" OR \"museum exhibition\" OR vernissage OR \"contemporary art\"",
     "festivals": "\"street fair\" OR \"outdoor festival\" OR \"block party\" OR \"festa\" OR carnival OR \"street festival\"",
     "markets": "\"farmers market\" OR \"flea market\" OR \"artisan market\" OR \"mercado\" OR \"street market\"",
@@ -119,6 +124,16 @@ def live_city_search(
             platform = "Ticketmaster"
         elif any(w in lower_text or w in lower_url for w in ["record store", "vinyl shop", "record shop", "in-store"]):
             platform = "Record Store"
+        elif any(w in lower_text or w in lower_url for w in ["bookstore", "book shop", "antiquarian books", "used books", "rare editions", "livraria", "indie bookshop"]):
+            platform = "Bookstore"
+        elif any(w in lower_text or w in lower_url for w in ["vintage clothing", "vintage boutique", "curated thrift", "archival fashion", "retro apparel", "vintage fashion"]):
+            platform = "Vintage Clothing"
+        elif any(w in lower_text or w in lower_url for w in ["vintage guitar", "tube amp", "vintage amp", "guitar shop", "synthesizer", "used guitar", "pedal boutique"]):
+            platform = "Vintage Gear"
+        elif any(w in lower_text or w in lower_url for w in ["mid century modern", "vintage furniture", "home design", "artisan ceramics", "modernist design"]):
+            platform = "Home Design"
+        elif any(w in lower_text or w in lower_url for w in ["kitchenware", "japanese knives", "culinary store", "cookware", "gourmet pantry", "spice merchant"]):
+            platform = "Culinary Goods"
         elif any(w in lower_text or w in lower_url for w in ["art gallery", "gallery opening", "contemporary art", "art exhibit", "museum exhibit", "vernissage"]):
             platform = "Art Gallery"
         elif any(w in lower_text or w in lower_url for w in ["film festival", "cinema", "open air cinema", "indie theatre", "screening"]):
@@ -152,10 +167,22 @@ def live_city_search(
         elif any(k in lower_url or k in lower_title for k in ["venue", "concert hall", "jazz club", "coliseu", "casa da música", "musicbox", "theatro", "theatre", "auditorium"]):
             platform = "Music Venue"
 
-        # Detect category
-        cat = category_hint or "gems"
-        if platform == "Record Store" or any(w in lower_text for w in ["record store", "vinyl shop", "in-store performance", "album signing", "turntable", "record shop"]):
+        # Detect category: Honor caller's explicit category_hint if provided and specific
+        valid_hint = category_hint if (category_hint and category_hint not in ("all", "gems")) else None
+        if valid_hint:
+            cat = valid_hint
+        elif platform == "Record Store" or any(w in lower_text for w in ["record store", "vinyl shop", "in-store performance", "album signing", "turntable", "record shop", "crate digging", "used vinyl"]):
             cat = "records"
+        elif platform == "Bookstore" or any(w in lower_text for w in ["bookstore", "book shop", "antiquarian books", "used books", "rare editions", "livraria", "book seller", "indie bookshop"]):
+            cat = "bookstores"
+        elif platform == "Vintage Clothing" or any(w in lower_text for w in ["vintage clothing", "vintage fashion", "curated thrift", "archival fashion", "retro apparel", "vintage boutique"]):
+            cat = "vintage-fashion"
+        elif platform == "Vintage Gear" or any(w in lower_text for w in ["vintage guitar", "tube amp", "vintage amp", "synthesizer", "guitar shop", "used guitar", "pedal boutique", "musical instruments"]):
+            cat = "vintage-gear"
+        elif platform == "Home Design" or any(w in lower_text for w in ["mid century modern", "vintage furniture", "home design", "artisan ceramics", "modernist design", "architectural antiques"]):
+            cat = "home-design"
+        elif platform == "Culinary Goods" or any(w in lower_text for w in ["kitchenware", "japanese knives", "culinary store", "artisan spices", "gourmet pantry", "cookware shop"]):
+            cat = "culinary-goods"
         elif platform == "Art Gallery" or any(w in lower_text for w in ["art exhibit", "gallery opening", "vernissage", "museum exhibition", "contemporary art", "sculpture", "biennale", "curator"]):
             cat = "art"
         elif platform == "Cinema & Film" or any(w in lower_text for w in ["film festival", "open air cinema", "outdoor movie", "screening", "indie cinema", "cinephile", "documentary screening"]):
@@ -172,18 +199,18 @@ def live_city_search(
             cat = "beer"
         elif platform == "Speakeasy Lounge" or any(w in lower_text for w in ["speakeasy", "craft cocktail", "cocktail bar", "mixology", "hidden bar", "secret bar", "libations"]):
             cat = "cocktails"
-        elif platform in ("Eventbrite", "Songkick", "DICE", "Ticketmaster", "Music Venue"):
+        elif platform in ("Eventbrite", "Songkick", "DICE", "Ticketmaster", "Music Venue") or re.search(r"\b(concert|live music|fado|gig|orchestra|recital|jazz club)\b", lower_text):
             cat = "music"
-        elif any(w in lower_text for w in ["fado", "music", "concert", "band", "live", "gig", "show", "tour", "venue", "festival", "orchestra", "dj"]):
-            cat = "music"
-        elif any(w in lower_text for w in ["wine", "port", "cellar", "quinta", "tasting", "douro", "winery", "vineyard"]):
+        elif re.search(r"\b(wine|winery|vineyard|cellar|quintas?|port wine|porto wine|vinho|adega)\b", lower_text):
             cat = "wine"
-        elif any(w in lower_text for w in ["restaurant", "food", "tasting", "cafe", "bistro", "pastéis", "seafood", "tasca", "trattoria", "brasserie", "eatery"]):
+        elif any(w in lower_text for w in ["restaurant", "food", "cafe", "bistro", "pastéis", "seafood", "tasca", "trattoria", "brasserie", "eatery"]):
             cat = "dining"
-        elif any(w in lower_text for w in ["castle", "museum", "cathedral", "monastery", "historic", "palace", "citadel"]):
+        elif any(w in lower_text for w in ["castle", "cathedral", "monastery", "historic", "palace", "citadel"]):
             cat = "historic"
         elif any(w in lower_text for w in ["miradouro", "viewpoint", "trail", "park", "beach", "walk", "river", "hike"]):
             cat = "outdoors"
+        else:
+            cat = category_hint or "gems"
 
         # Check for free admission
         is_free = False
@@ -198,6 +225,21 @@ def live_city_search(
         elif platform == "Record Store" or cat == "records":
             cost_val = "Free / Browse Vinyl"
             time_val = "Afternoon / Evening In-Store"
+        elif platform == "Bookstore" or cat == "bookstores":
+            cost_val = "Free / Browse Books"
+            time_val = "Daytime & Literary Hours"
+        elif platform == "Vintage Clothing" or cat == "vintage-fashion":
+            cost_val = "$$ - $$$"
+            time_val = "Boutique Hours"
+        elif platform == "Vintage Gear" or cat == "vintage-gear":
+            cost_val = "$$ - $$$$"
+            time_val = "Afternoon Auditions"
+        elif platform == "Home Design" or cat == "home-design":
+            cost_val = "$$ - $$$$"
+            time_val = "Showroom Hours"
+        elif platform == "Culinary Goods" or cat == "culinary-goods":
+            cost_val = "$$ - $$$"
+            time_val = "Market & Pantry Hours"
         elif platform == "Art Gallery" or cat == "art":
             cost_val = "Free Gallery / Ticketed Museum"
             time_val = "Gallery Hours & Vernissages"
