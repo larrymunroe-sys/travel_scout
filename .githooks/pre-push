@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Travel Scout Pre-Push Hook: Safeguard local backup before pushing code to git
+echo "🛡️  [Travel Scout Pre-Push Hook] Backing up database to local folder (backups/local/)..."
+
+ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$ROOT_DIR"
+
+if command -v python >/dev/null 2>&1; then
+    python scout/backup.py --action backup --folder backups/local || true
+elif command -v python3 >/dev/null 2>&1; then
+    python3 scout/backup.py --action backup --folder backups/local || true
+fi
+
+# Check if itineraries_backup.json was modified
+if ! git diff --quiet backups/itineraries_backup.json 2>/dev/null; then
+    echo "💡 [Travel Scout Notice] Latest database was saved to local backup folder."
+    echo "   To include it in this Git deployment, run: git add backups/itineraries_backup.json && git commit --amend --no-edit"
+fi
+
+exit 0

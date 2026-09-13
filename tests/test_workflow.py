@@ -187,13 +187,15 @@ class WorkflowTestRunner:
             f"({len(labels)} labels verified, 0 unassociated)"
         )
 
+        self.assert_test("Server refresh detection banner (#refreshDetectionBanner) present", 'id="refreshDetectionBanner"' in html)
+
         # 5. Cache Invalidation Version Bumps
         if self.mode == "LIVE_HTTP":
-            self.assert_test("styles.css has fresh cache version", 'styles.css?v=4.6' in html or 'styles.css?v=4.5' in html)
-            self.assert_test("app.js has fresh cache version", 'app.js?v=4.6' in html or 'app.js?v=4.5' in html)
+            self.assert_test("styles.css has fresh cache version", any(v in html for v in ('styles.css?v=4.7', 'styles.css?v=4.6', 'styles.css?v=4.5')))
+            self.assert_test("app.js has fresh cache version", any(v in html for v in ('app.js?v=4.7', 'app.js?v=4.6', 'app.js?v=4.5')))
         else:
-            self.assert_test("styles.css has cache version ?v=4.6", 'styles.css?v=4.6' in html or 'styles.css?v=4.5' in html)
-            self.assert_test("app.js has cache version ?v=4.6", 'app.js?v=4.6' in html or 'app.js?v=4.5' in html)
+            self.assert_test("styles.css has cache version ?v=4.7", 'styles.css?v=4.7' in html or 'styles.css?v=4.6' in html)
+            self.assert_test("app.js has cache version ?v=4.7", 'app.js?v=4.7' in html or 'app.js?v=4.6' in html)
 
         # 6. Service Worker headers
         sw_res = self._request("GET", "/sw.js")
@@ -209,7 +211,7 @@ class WorkflowTestRunner:
             self.assert_test("Service Worker has no-cache header", "no-cache" in cache_control.lower())
         self.assert_test(
             "Service Worker contains current CACHE_NAME",
-            "travel-scout-v4.6" in sw_res.text or "travel-scout-v4.5" in sw_res.text
+            "travel-scout-v4.7" in sw_res.text or "travel-scout-v4.6" in sw_res.text or "travel-scout-v4.5" in sw_res.text
         )
 
         # 7. Favicon endpoint
@@ -534,6 +536,12 @@ class WorkflowTestRunner:
         dl_json = json.loads(res_dl.text) if res_dl.status_code == 200 else {}
         self.assert_test("Backup download contains 'trips' list", isinstance(dl_json.get("trips"), list))
         self.assert_test("Backup download captures current trip count", len(dl_json.get("trips", [])) >= 1)
+
+        # 3. Test reimport from local folder endpoint
+        res_local = self._request("POST", "/api/backup/reimport-local")
+        self.assert_test("POST /api/backup/reimport-local returns 200 OK", res_local.status_code == 200)
+        local_res_data = res_local.json() if res_local.status_code == 200 else {}
+        self.assert_test("Local folder reimport succeeded", local_res_data.get("status") == "success")
 
     # --------------------------------------------------------------------------
     # TEARDOWN: Automated Database Cleanup

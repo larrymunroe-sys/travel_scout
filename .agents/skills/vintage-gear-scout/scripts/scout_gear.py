@@ -1,5 +1,12 @@
-"""CLI runner for the Vintage Music Instruments Scout Agent."""
 import os, sys, argparse
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 while current_dir and not os.path.exists(os.path.join(current_dir, "app.py")):

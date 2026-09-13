@@ -359,6 +359,7 @@ async function initApp() {
   try { initExploreFilters(); } catch (e) { console.error("initExploreFilters error:", e); }
   try { await loadCurrentUser(); } catch (e) { console.error("loadCurrentUser error:", e); }
   try { await loadInitialTrip(); } catch (e) { console.error("loadInitialTrip error:", e); }
+  try { await checkServerRefreshStatus(); } catch (e) { console.error("checkServerRefreshStatus error:", e); }
   try { initScout(); } catch (e) { console.error("initScout error:", e); }
 }
 
@@ -4340,8 +4341,47 @@ window.closeBackupModal = function() {
   if (modal) modal.style.display = "none";
 };
 
+function saveBackupToLocalStorage(backupData) {
+  try {
+    if (!backupData) return;
+    const trips = backupData.trips || [];
+    if (trips.length === 0) return;
+    const snapshot = {
+      saved_at: new Date().toISOString(),
+      total_trips: trips.length,
+      data: backupData
+    };
+    localStorage.setItem("travel_scout_local_backup_snapshot", JSON.stringify(snapshot));
+  } catch (err) {
+    console.warn("Notice: Could not mirror backup to localStorage:", err);
+  }
+}
+
 async function refreshBackupStatus() {
   const detailEl = document.getElementById("backupStatusDetail");
+  const browserNote = document.getElementById("browserSnapshotNote");
+  const reimportBrowserBtn = document.getElementById("reimportFromBrowserBtn");
+
+  // Check local browser storage first
+  let localSnapshot = null;
+  try {
+    const raw = localStorage.getItem("travel_scout_local_backup_snapshot");
+    if (raw) localSnapshot = JSON.parse(raw);
+  } catch (e) {}
+
+  if (browserNote && reimportBrowserBtn) {
+    if (localSnapshot && localSnapshot.total_trips) {
+      const timeStr = localSnapshot.saved_at ? new Date(localSnapshot.saved_at).toLocaleString() : "Recently";
+      browserNote.innerHTML = `Found <strong style="color:#38bdf8;">${localSnapshot.total_trips} itineraries</strong> mirrored locally (saved ${timeStr}). Ready for 1-click restore!`;
+      reimportBrowserBtn.disabled = false;
+      reimportBrowserBtn.innerHTML = `⚡ 1-Click Reimport (${localSnapshot.total_trips} trips)`;
+    } else {
+      browserNote.textContent = "No local browser backup snapshot recorded yet. Click 'Mirror to Browser Memory' or save to your local backup folder below.";
+      reimportBrowserBtn.disabled = true;
+      reimportBrowserBtn.innerHTML = "⚡ 1-Click Reimport Now";
+    }
+  }
+
   if (!detailEl) return;
   try {
     const res = await fetch("/api/backup/status", {
@@ -4352,10 +4392,26 @@ async function refreshBackupStatus() {
     const data = await res.json();
     const sizeKb = data.backup_size_bytes ? (data.backup_size_bytes / 1024).toFixed(1) + " KB" : "0 KB";
     const timeStr = data.last_backup_time ? new Date(data.last_backup_time).toLocaleString() : "None yet";
+    const localSnapCount = data.local_snapshots_count || 0;
+    const localDetail = data.latest_local_snapshot ? ` (latest: ${data.latest_local_snapshot.filename})` : "";
+
     detailEl.innerHTML = `
-      <span>Status: <strong style="color:#4ade80;">Ready</strong> &bull; Total Trips: <strong>${data.total_trips}</strong> &bull; File Size: <strong>${sizeKb}</strong></span><br/>
-      <span>Last Server Backup: <strong>${timeStr}</strong> &bull; Snapshots in History: <strong>${data.historical_snapshots_count}</strong></span>
+      <span>&bull; Server Database: <strong style="color:#4ade80;">Active</strong> &bull; Total Trips: <strong>${data.total_trips || 0}</strong> &bull; Registered Users: <strong>${data.total_users || 0}</strong></span><br/>
+      <span>&bull; Server Master Backup: <strong>${sizeKb}</strong> &bull; Last Synced: <strong>${timeStr}</strong></span><br/>
+      <span>&bull; Local Backup Folder (<code>backups/local/</code>): <strong>${localSnapCount} snapshots saved</strong>${localDetail}</span><br/>
+      <span>&bull; Browser Local Mirror: <strong>${localSnapshot ? localSnapshot.total_trips + ' trips cached' : 'None yet'}</strong></span>
     `;
+
+    // Auto-update browser mirror if server has valid trips
+    if (data.total_trips > 0 && (!localSnapshot || (data.total_trips >= localSnapshot.total_trips))) {
+      try {
+        const dlRes = await fetch("/api/backup/download", { headers: getAuthHeaders(), credentials: "include" });
+        if (dlRes.ok) {
+          const dlJson = await dlRes.json();
+          saveBackupToLocalStorage(dlJson);
+        }
+      } catch (e) {}
+    }
   } catch (err) {
     detailEl.textContent = "Backup system active. Ready to save or reimport.";
   }
@@ -4372,21 +4428,205 @@ function showBackupFeedback(message, isSuccess = true) {
   text.textContent = message;
 }
 
+window.reimportFromLocalBrowserBackup = async function() {
+  let localSnapshot = null;
+  try {
+    const raw = localStorage.getItem("travel_scout_local_backup_snapshot");
+    if (raw) localSnapshot = JSON.parse(raw);
+  } catch (e) {}
+
+  if (!localSnapshot || !localSnapshot.data || !localSnapshot.data.trips) {
+    alert("No local browser backup snapshot found. Please select a JSON file from your backup folder.");
+    if (window.openBackupModal) window.openBackupModal();
+    return;
+  }
+
+  const tripCount = localSnapshot.total_trips || localSnapshot.data.trips.length;
+  const timeStr = localSnapshot.saved_at ? new Date(localSnapshot.saved_at).toLocaleString() : "recently";
+
+  if (!confirm(`Reimport ${tripCount} itineraries from your local browser backup (saved ${timeStr})?`)) {
+    return;
+  }
+
+  const btn = document.getElementById("reimportFromBrowserBtn");
+  const bannerBtn = document.getElementById("bannerReimportBtn");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "⏳ Reimporting...";
+  }
+  if (bannerBtn) {
+    bannerBtn.disabled = true;
+    bannerBtn.textContent = "⏳ Reimporting...";
+  }
+
+  try {
+    const blob = new Blob([JSON.stringify(localSnapshot.data)], { type: "application/json" });
+    const formData = new FormData();
+    formData.append("file", blob, "local_browser_backup.json");
+
+    const res = await fetch("/api/backup/upload", {
+      method: "POST",
+      headers: getAuthHeaders(),
+      credentials: "include",
+      body: formData
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Restore failed with HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    showBackupFeedback(`✓ Success! Restored ${data.restored_trips || 0} trips, ${data.restored_items || 0} stops, and ${data.restored_users || 0} users from local backup.`, true);
+
+    const banner = document.getElementById("refreshDetectionBanner");
+    if (banner) banner.style.display = "none";
+
+    await refreshBackupStatus();
+    if (typeof loadTripsDropdown === "function") await loadTripsDropdown();
+    if (typeof refreshTrip === "function") await refreshTrip();
+  } catch (err) {
+    showBackupFeedback("Error reimporting local backup: " + err.message, false);
+    alert("Error reimporting local backup: " + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = `⚡ 1-Click Reimport (${tripCount} trips)`;
+    }
+    if (bannerBtn) {
+      bannerBtn.disabled = false;
+      bannerBtn.textContent = "⚡ 1-Click Reimport Now";
+    }
+  }
+};
+
+async function saveToLocalBackupFolder() {
+  const btn = document.getElementById("saveToLocalFolderBtn");
+  const prevText = btn ? btn.innerHTML : "📁 Save to Local Backup Folder";
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = "⏳ Preparing...";
+  }
+
+  try {
+    const res = await fetch("/api/backup/download", {
+      headers: getAuthHeaders(),
+      credentials: "include"
+    });
+    if (!res.ok) throw new Error("Failed to export backup data from server");
+
+    const blob = await res.blob();
+    const text = await blob.text();
+    const parsed = JSON.parse(text);
+
+    // Save copy in browser localStorage too
+    saveBackupToLocalStorage(parsed);
+
+    const nowStr = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const suggestedName = `travel_scout_backup_${nowStr}.json`;
+
+    // Try modern File System Access API if supported (Chrome, Edge, Chromium)
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: suggestedName,
+          types: [{
+            description: "Travel Scout Backup JSON (*.json)",
+            accept: { "application/json": [".json"] }
+          }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(text);
+        await writable.close();
+        showBackupFeedback(`✓ Successfully saved backup into your selected local folder (${suggestedName})!`, true);
+        await refreshBackupStatus();
+        return;
+      } catch (pickerErr) {
+        if (pickerErr.name === "AbortError") {
+          // User deliberately cancelled the file picker dialog
+          return;
+        }
+        // If file picker fails for any other reason, fall through to browser download
+      }
+    }
+
+    // Standard Download Fallback
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = suggestedName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    showBackupFeedback(`✓ Backup exported as ${suggestedName} into your local backup/downloads folder!`, true);
+    await refreshBackupStatus();
+  } catch (err) {
+    showBackupFeedback("Save to local folder error: " + err.message, false);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = prevText;
+    }
+  }
+}
+
+async function checkServerRefreshStatus() {
+  try {
+    const res = await fetch("/api/backup/status", {
+      headers: getAuthHeaders(),
+      credentials: "include"
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const serverTrips = data.total_trips || 0;
+
+    const raw = localStorage.getItem("travel_scout_local_backup_snapshot");
+    if (!raw) return;
+
+    const localSnap = JSON.parse(raw);
+    const localTrips = localSnap.total_trips || (localSnap.data && localSnap.data.trips ? localSnap.data.trips.length : 0);
+
+    // If server has fewer trips than local storage, server code was refreshed or container reset!
+    if (localTrips > 0 && serverTrips < localTrips) {
+      const banner = document.getElementById("refreshDetectionBanner");
+      const textEl = document.getElementById("refreshDetectionText");
+      const timeStr = localSnap.saved_at ? new Date(localSnap.saved_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "recently";
+      if (banner && textEl) {
+        textEl.innerHTML = `Server currently has <strong>${serverTrips}</strong> trip${serverTrips === 1 ? '' : 's'}, but your local backup contains <strong>${localTrips} itineraries</strong> (saved at ${timeStr}).`;
+        banner.style.display = "flex";
+      }
+    }
+  } catch (e) {
+    console.debug("checkServerRefreshStatus skipped:", e);
+  }
+}
+
 function initBackupModal() {
   const openBtn = document.getElementById("openBackupBtn");
   const closeBtn = document.getElementById("closeBackupModalBtn");
   const closeBtn2 = document.getElementById("closeBackupModalBtn2");
   const refreshBtn = document.getElementById("refreshBackupStatusBtn");
+  const saveLocalFolderBtn = document.getElementById("saveToLocalFolderBtn");
   const downloadBtn = document.getElementById("downloadBackupBtn");
+  const saveBrowserSnapshotBtn = document.getElementById("saveBrowserSnapshotBtn");
   const snapshotBtn = document.getElementById("saveServerSnapshotBtn");
+  const reimportBrowserBtn = document.getElementById("reimportFromBrowserBtn");
   const fileInput = document.getElementById("backupFileInput");
+  const filePreview = document.getElementById("backupFilePreview");
   const uploadBtn = document.getElementById("uploadBackupBtn");
-  const restoreBtn = document.getElementById("restoreServerBackupBtn");
+  const restoreLocalFolderBtn = document.getElementById("restoreLocalFolderBtn");
+  const restoreServerBackupBtn = document.getElementById("restoreServerBackupBtn");
+  const bannerReimportBtn = document.getElementById("bannerReimportBtn");
 
   if (openBtn) openBtn.onclick = () => window.openBackupModal();
   if (closeBtn) closeBtn.onclick = () => window.closeBackupModal();
   if (closeBtn2) closeBtn2.onclick = () => window.closeBackupModal();
   if (refreshBtn) refreshBtn.onclick = () => refreshBackupStatus();
+
+  if (saveLocalFolderBtn) {
+    saveLocalFolderBtn.onclick = () => saveToLocalBackupFolder();
+  }
 
   if (downloadBtn) {
     downloadBtn.onclick = async () => {
@@ -4400,6 +4640,10 @@ function initBackupModal() {
         });
         if (!res.ok) throw new Error("Failed to download backup");
         const blob = await res.blob();
+        const text = await blob.text();
+        const json = JSON.parse(text);
+        saveBackupToLocalStorage(json);
+
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -4420,6 +4664,30 @@ function initBackupModal() {
     };
   }
 
+  if (saveBrowserSnapshotBtn) {
+    saveBrowserSnapshotBtn.onclick = async () => {
+      saveBrowserSnapshotBtn.disabled = true;
+      const prevText = saveBrowserSnapshotBtn.textContent;
+      saveBrowserSnapshotBtn.textContent = "⏳ Mirroring...";
+      try {
+        const res = await fetch("/api/backup/download", {
+          headers: getAuthHeaders(),
+          credentials: "include"
+        });
+        if (!res.ok) throw new Error("Failed to fetch itineraries snapshot");
+        const data = await res.json();
+        saveBackupToLocalStorage(data);
+        showBackupFeedback(`✓ Mirrored ${data.total_trips || (data.trips ? data.trips.length : 0)} itineraries into browser local memory!`, true);
+        await refreshBackupStatus();
+      } catch (err) {
+        showBackupFeedback("Browser mirror error: " + err.message, false);
+      } finally {
+        saveBrowserSnapshotBtn.disabled = false;
+        saveBrowserSnapshotBtn.textContent = prevText;
+      }
+    };
+  }
+
   if (snapshotBtn) {
     snapshotBtn.onclick = async () => {
       snapshotBtn.disabled = true;
@@ -4432,7 +4700,7 @@ function initBackupModal() {
           credentials: "include"
         });
         const data = await res.json();
-        showBackupFeedback(`✓ Server snapshot created with ${data.total_trips} trips!`, true);
+        showBackupFeedback(`✓ Server snapshot created with ${data.total_trips} trips and ${data.total_users || 0} users!`, true);
         await refreshBackupStatus();
       } catch (err) {
         showBackupFeedback("Snapshot error: " + err.message, false);
@@ -4443,9 +4711,51 @@ function initBackupModal() {
     };
   }
 
+  if (reimportBrowserBtn) {
+    reimportBrowserBtn.onclick = () => window.reimportFromLocalBrowserBackup();
+  }
+
+  if (bannerReimportBtn) {
+    bannerReimportBtn.onclick = () => window.reimportFromLocalBrowserBackup();
+  }
+
   if (fileInput && uploadBtn) {
     fileInput.onchange = () => {
-      uploadBtn.disabled = !fileInput.files || fileInput.files.length === 0;
+      if (!fileInput.files || fileInput.files.length === 0) {
+        uploadBtn.disabled = true;
+        if (filePreview) filePreview.style.display = "none";
+        return;
+      }
+      const file = fileInput.files[0];
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const parsed = JSON.parse(ev.target.result);
+          if (parsed && Array.isArray(parsed.trips)) {
+            uploadBtn.disabled = false;
+            if (filePreview) {
+              filePreview.style.display = "block";
+              const tripCount = parsed.trips.length;
+              let itemCount = 0;
+              parsed.trips.forEach(t => { if (Array.isArray(t.items)) itemCount += t.items.length; });
+              filePreview.innerHTML = `📄 <strong>${escapeHtml(file.name)}</strong>: ${tripCount} itineraries &bull; ${itemCount} stops ready to reimport`;
+            }
+          } else {
+            uploadBtn.disabled = true;
+            if (filePreview) {
+              filePreview.style.display = "block";
+              filePreview.innerHTML = `<span style="color:#f87171;">⚠️ Selected file is not a valid Travel Scout backup.</span>`;
+            }
+          }
+        } catch (e) {
+          uploadBtn.disabled = true;
+          if (filePreview) {
+            filePreview.style.display = "block";
+            filePreview.innerHTML = `<span style="color:#f87171;">⚠️ Could not parse JSON file: ${escapeHtml(e.message)}</span>`;
+          }
+        }
+      };
+      reader.readAsText(file);
     };
 
     uploadBtn.onclick = async () => {
@@ -4468,28 +4778,63 @@ function initBackupModal() {
         }
         const data = await res.json();
         showBackupFeedback(
-          `✓ Success! Restored ${data.restored_trips || 0} trips and ${data.restored_items || 0} items (preserved ${data.skipped_deleted_items || 0} deleted items).`,
+          `✓ Success! Restored ${data.restored_trips || 0} trips, ${data.restored_items || 0} stops, and ${data.restored_users || 0} users (preserved ${data.skipped_deleted_items || 0} deleted items).`,
           true
         );
         fileInput.value = "";
         uploadBtn.disabled = true;
+        if (filePreview) filePreview.style.display = "none";
+        
+        const banner = document.getElementById("refreshDetectionBanner");
+        if (banner) banner.style.display = "none";
+
         await refreshBackupStatus();
         if (typeof loadTripsDropdown === "function") await loadTripsDropdown();
         if (typeof refreshTrip === "function") await refreshTrip();
       } catch (err) {
         showBackupFeedback("Reimport error: " + err.message, false);
       } finally {
-        uploadBtn.textContent = "📤 Reimport Itineraries from File";
+        uploadBtn.textContent = "📤 Reimport Itineraries from Selected File";
       }
     };
   }
 
-  if (restoreBtn) {
-    restoreBtn.onclick = async () => {
+  if (restoreLocalFolderBtn) {
+    restoreLocalFolderBtn.onclick = async () => {
+      if (!confirm("Reimport itineraries from the latest snapshot in the server's local backup folder (backups/local/)?")) return;
+      restoreLocalFolderBtn.disabled = true;
+      const prevText = restoreLocalFolderBtn.textContent;
+      restoreLocalFolderBtn.textContent = "⏳ Reimporting...";
+      try {
+        const res = await fetch("/api/backup/reimport-local", {
+          method: "POST",
+          headers: getAuthHeaders(),
+          credentials: "include"
+        });
+        if (!res.ok) throw new Error("Local folder reimport failed");
+        const data = await res.json();
+        showBackupFeedback(
+          `✓ Local folder restore complete: ${data.restored_trips || 0} trips, ${data.restored_items || 0} items re-synced!`,
+          true
+        );
+        await refreshBackupStatus();
+        if (typeof loadTripsDropdown === "function") await loadTripsDropdown();
+        if (typeof refreshTrip === "function") await refreshTrip();
+      } catch (err) {
+        showBackupFeedback("Local folder restore error: " + err.message, false);
+      } finally {
+        restoreLocalFolderBtn.disabled = false;
+        restoreLocalFolderBtn.textContent = prevText;
+      }
+    };
+  }
+
+  if (restoreServerBackupBtn) {
+    restoreServerBackupBtn.onclick = async () => {
       if (!confirm("Sync and restore all itineraries from the server backup snapshot?")) return;
-      restoreBtn.disabled = true;
-      const prevText = restoreBtn.textContent;
-      restoreBtn.textContent = "⏳ Restoring...";
+      restoreServerBackupBtn.disabled = true;
+      const prevText = restoreServerBackupBtn.textContent;
+      restoreServerBackupBtn.textContent = "⏳ Restoring...";
       try {
         const res = await fetch("/api/backup/restore", {
           method: "POST",
@@ -4508,8 +4853,8 @@ function initBackupModal() {
       } catch (err) {
         showBackupFeedback("Restore error: " + err.message, false);
       } finally {
-        restoreBtn.disabled = false;
-        restoreBtn.textContent = prevText;
+        restoreServerBackupBtn.disabled = false;
+        restoreServerBackupBtn.textContent = prevText;
       }
     };
   }

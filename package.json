@@ -7,6 +7,7 @@
     "start": "python main.py web",
     "dev": "python main.py dev",
     "scan": "python main.py scan",
+    "agents": "python scripts/run_all_agents.py",
     "test": "python test_workflow.py"
   },
   "keywords": [

@@ -13,3 +13,4 @@ dist/
 .session_secret
 scratch/
 backups/history/
+backups/local/*.json

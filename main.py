@@ -74,11 +74,33 @@ def main():
 
     subparsers.add_parser("scan", help="Run multi-city autonomous scan")
 
+    agents_p = subparsers.add_parser("agents", help="Run all 14 autonomous specialist agents")
+    agents_p.add_argument("--trip-id", type=str, default=None, help="Target specific trip ID")
+    agents_p.add_argument("--all-trips", action="store_true", help="Run across all trips in database")
+    agents_p.add_argument("--max-results", type=int, default=2, help="Max results per query")
+    agents_p.add_argument("--dry-run", action="store_true", help="Run without persisting new items")
+
     # Gracefully tolerate npm or CLI pass-through arguments
     args, unknown = parser.parse_known_args()
 
     if args.command == "scan":
         run_scan()
+    elif args.command in ("agents", "all-agents"):
+        from scripts.run_all_agents import run_all_agents_for_trip, get_target_trips
+        init_db()
+        with SessionLocal() as db:
+            from database.models import User
+            trips = get_target_trips(db, trip_id=getattr(args, "trip_id", None), all_trips=getattr(args, "all_trips", False))
+            user = db.query(User).first()
+            user_id = user.id if user else (trips[0].owner_id if trips else None)
+            for t in trips:
+                run_all_agents_for_trip(
+                    db=db,
+                    trip=t,
+                    user_id=user_id,
+                    max_results=getattr(args, "max_results", 2),
+                    dry_run=getattr(args, "dry_run", False)
+                )
     else:
         host = getattr(args, "host", None)
         port = getattr(args, "port", None)

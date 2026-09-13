@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="/static/styles.css?v=4.6" />
+  <link rel="stylesheet" href="/static/styles.css?v=4.7" />
   <link rel="manifest" href="/static/manifest.json" />
   <meta name="theme-color" content="#0284c7" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -128,6 +128,30 @@
   </div>
 
   <main class="main-container">
+    <!-- SERVER REFRESH & LOCAL BACKUP RECOVERY ALERT BANNER -->
+    <div id="refreshDetectionBanner" style="display: none; background: linear-gradient(135deg, rgba(245, 158, 11, 0.16), rgba(239, 68, 68, 0.14)); border: 1px solid rgba(245, 158, 11, 0.45); border-radius: 8px; padding: 0.9rem 1.25rem; margin-bottom: 1.25rem; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.85rem;">
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <span style="font-size: 1.4rem;">⚠️</span>
+        <div>
+          <strong style="color: #fbbf24; font-size: 0.95rem; display: block;">Server Code Refreshed — Local Backup Ready to Reimport</strong>
+          <span style="font-size: 0.82rem; color: var(--text-main);" id="refreshDetectionText">
+            Your itineraries were safely backed up locally. Reimport them now to restore your full trip data to the refreshed server.
+          </span>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+        <button type="button" class="btn btn-primary btn-sm" id="bannerReimportBtn" onclick="window.reimportFromLocalBrowserBackup ? window.reimportFromLocalBrowserBackup() : window.openBackupModal()" style="font-weight: 700; padding: 0.4rem 0.9rem; font-size: 0.82rem;">
+          ⚡ 1-Click Reimport Now
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="window.openBackupModal()" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">
+          💾 Open Backup Manager
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('refreshDetectionBanner').style.display='none';" style="padding: 0.4rem 0.6rem; font-size: 0.8rem;" title="Dismiss notification">
+          ✕
+        </button>
+      </div>
+    </div>
+
     {% if not current_user %}
     <div id="loggedOutBanner" style="background: linear-gradient(135deg, rgba(234,67,53,0.12), rgba(56,189,248,0.08)); border: 1px solid rgba(234,67,53,0.35); border-radius: 8px; padding: 1.1rem 1.5rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
       <div>
@@ -1229,29 +1253,31 @@
 
   <!-- MODAL 14: BACKUP, RESTORE & REIMPORT ITINERARIES -->
   <div class="modal-overlay" id="backupModal" style="display:none;" onclick="if(event.target === this) this.style.display='none';">
-    <div class="modal-card" style="max-width: 660px; max-height: 88vh; overflow-y: auto;">
+    <div class="modal-card" style="max-width: 680px; max-height: 88vh; overflow-y: auto;">
       <div class="modal-header">
         <div style="display: flex; align-items: center; gap: 0.6rem;">
           <span style="font-size: 1.5rem;">💾</span>
           <div>
-            <h3 style="margin: 0; font-size: 1.25rem;">Backup, Restore &amp; Reimport Itineraries</h3>
+            <h3 style="margin: 0; font-size: 1.25rem;">Local Backup, Restore &amp; Server Reimport</h3>
             <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">
-              Safeguard itineraries before refreshes, download offline JSON, or reimport after updates
+              Safeguard itineraries to your local backup folder, mirror in browser memory, or reimport after server code is refreshed
             </p>
           </div>
         </div>
         <button type="button" class="modal-close" id="closeBackupModalBtn" onclick="document.getElementById('backupModal').style.display='none';">&times;</button>
       </div>
 
-      <div style="display: flex; flex-direction: column; gap: 1.25rem; padding: 0.75rem 0;">
+      <div style="display: flex; flex-direction: column; gap: 1.15rem; padding: 0.75rem 0;">
         <!-- Status Card -->
         <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 0.9rem 1.1rem;">
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.6rem;">
             <div>
-              <strong style="color: #38bdf8; font-size: 0.9rem; display: block;">🛡️ System Backup Health &amp; Memory</strong>
-              <span style="font-size: 0.78rem; color: var(--text-muted);" id="backupStatusDetail">
+              <strong style="color: #38bdf8; font-size: 0.92rem; display: flex; align-items: center; gap: 0.35rem;">
+                🛡️ Backup Health &amp; Local Recovery Status
+              </strong>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.35rem; line-height: 1.45;" id="backupStatusDetail">
                 Checking backup status...
-              </span>
+              </div>
             </div>
             <button type="button" class="btn btn-secondary btn-sm" id="refreshBackupStatusBtn" style="font-size: 0.75rem; padding: 0.35rem 0.7rem;">
               🔄 Refresh Status
@@ -1259,63 +1285,83 @@
           </div>
         </div>
 
-        <!-- Action 1: Pre-Refresh Download / Export -->
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; gap: 0.6rem;">
+        <!-- Section 1: Save Locally to Backup Folder -->
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; gap: 0.65rem;">
           <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <span style="font-size: 1.2rem;">📥</span>
+            <span style="font-size: 1.25rem;">📁</span>
             <div>
-              <strong style="font-size: 0.92rem; color: var(--text-main);">1. Save &amp; Download Backup (JSON)</strong>
+              <strong style="font-size: 0.95rem; color: var(--text-main);">1. Save Locally to Backup Folder</strong>
               <p style="font-size: 0.78rem; color: var(--text-muted); margin: 0.2rem 0 0 0;">
-                Exports all 18 itineraries, lodging stays, custom stops, personal notes, expenses, and deletion memory into an offline JSON file.
+                Export all itineraries, lodging stays, custom stops, notes, expenses, and deletion memory into your computer's local backup folder or offline JSON.
               </p>
             </div>
           </div>
-          <div style="display: flex; gap: 0.6rem; margin-top: 0.4rem; flex-wrap: wrap;">
-            <button type="button" class="btn btn-primary" id="downloadBackupBtn" style="font-weight: 600; padding: 0.55rem 1.1rem;">
-              📥 Download Complete Backup (.json)
+          <div style="display: flex; gap: 0.6rem; margin-top: 0.35rem; flex-wrap: wrap;">
+            <button type="button" class="btn btn-primary" id="saveToLocalFolderBtn" style="font-weight: 700; padding: 0.55rem 1.15rem; font-size: 0.88rem;" title="Choose local folder or save directly to disk">
+              📁 Save to Local Backup Folder
             </button>
-            <button type="button" class="btn btn-secondary" id="saveServerSnapshotBtn" style="font-size: 0.8rem; padding: 0.55rem 0.9rem;">
+            <button type="button" class="btn btn-secondary" id="downloadBackupBtn" style="font-size: 0.82rem; padding: 0.55rem 0.95rem;" title="Download JSON file directly">
+              📥 Download Backup (.json)
+            </button>
+            <button type="button" class="btn btn-secondary" id="saveBrowserSnapshotBtn" style="font-size: 0.82rem; padding: 0.55rem 0.95rem;" title="Mirror copy directly into browser localStorage for instant 1-click recovery">
+              💾 Mirror to Browser Memory
+            </button>
+            <button type="button" class="btn btn-secondary" id="saveServerSnapshotBtn" style="font-size: 0.82rem; padding: 0.55rem 0.95rem;" title="Save a fresh server snapshot to server disk">
               ⚡ Snapshot Server Now
             </button>
           </div>
         </div>
 
-        <!-- Action 2: Reimport / Restore from Uploaded JSON -->
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; gap: 0.6rem;">
+        <!-- Section 2: Reimport After Server Code Refresh -->
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; gap: 0.85rem;">
           <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <span style="font-size: 1.2rem;">📤</span>
+            <span style="font-size: 1.25rem;">⚡</span>
             <div>
-              <strong style="font-size: 0.92rem; color: var(--text-main);">2. Reimport from Backup File (JSON)</strong>
+              <strong style="font-size: 0.95rem; color: var(--text-main);">2. Reimport After Server Code is Refreshed</strong>
               <p style="font-size: 0.78rem; color: var(--text-muted); margin: 0.2rem 0 0 0;">
-                Select a previously saved JSON backup to reimport all itineraries. Deletion memory ensures cards you previously deleted remain removed!
+                When new code is uploaded from git and the server restarts, restore your itineraries using any of these recovery methods:
               </p>
             </div>
           </div>
-          <div style="margin-top: 0.4rem;">
-            <div class="form-group" style="margin-bottom: 0.6rem;">
-              <label for="backupFileInput" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.3rem; display: block;">Select Backup JSON File</label>
-              <input type="file" id="backupFileInput" accept=".json,application/json" style="font-size: 0.82rem; padding: 0.4rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 6px; width: 100%; color: var(--text-main);" />
+
+          <!-- Method A: 1-Click Instant Browser Memory Reimport -->
+          <div style="background: rgba(56, 189, 248, 0.05); border: 1px dashed rgba(56, 189, 248, 0.35); border-radius: 6px; padding: 0.8rem 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+              <div>
+                <strong style="font-size: 0.85rem; color: #38bdf8; display: block;">Method A: ⚡ 1-Click Browser Storage Reimport</strong>
+                <span style="font-size: 0.76rem; color: var(--text-muted);" id="browserSnapshotNote">
+                  Checking for local browser backup...
+                </span>
+              </div>
+              <button type="button" class="btn btn-primary btn-sm" id="reimportFromBrowserBtn" style="font-weight: 700; padding: 0.45rem 1rem; font-size: 0.82rem;" disabled>
+                ⚡ 1-Click Reimport Now
+              </button>
             </div>
-            <button type="button" class="btn btn-secondary" id="uploadBackupBtn" style="font-weight: 600; padding: 0.55rem 1.1rem;" disabled>
-              📤 Reimport Itineraries from File
+          </div>
+
+          <!-- Method B: Select File from Local Backup Folder -->
+          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); border-radius: 6px; padding: 0.8rem 1rem;">
+            <strong style="font-size: 0.85rem; color: var(--text-main); display: block; margin-bottom: 0.35rem;">Method B: 📂 Select File from Local Backup Folder</strong>
+            <p style="font-size: 0.76rem; color: var(--text-muted); margin: 0 0 0.55rem 0;">
+              Pick any previously saved <code>travel_scout_backup_*.json</code> from your local backup folder.
+            </p>
+            <div class="form-group" style="margin-bottom: 0.6rem;">
+              <label for="backupFileInput" style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.25rem; display: block;">Select Backup JSON File</label>
+              <input type="file" id="backupFileInput" accept=".json,application/json" style="font-size: 0.82rem; padding: 0.4rem; background: rgba(0,0,0,0.25); border: 1px solid var(--border); border-radius: 6px; width: 100%; color: var(--text-main);" />
+            </div>
+            <div id="backupFilePreview" style="display: none; font-size: 0.78rem; color: #38bdf8; margin-bottom: 0.6rem; padding: 0.4rem 0.6rem; background: rgba(56, 189, 248, 0.08); border-radius: 4px;"></div>
+            <button type="button" class="btn btn-secondary" id="uploadBackupBtn" style="font-weight: 600; padding: 0.5rem 1rem; font-size: 0.82rem;" disabled>
+              📤 Reimport Itineraries from Selected File
             </button>
           </div>
-        </div>
 
-        <!-- Action 3: One-Click Server Sync / Restore -->
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; gap: 0.6rem;">
-          <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <span style="font-size: 1.2rem;">🔄</span>
-            <div>
-              <strong style="font-size: 0.92rem; color: var(--text-main);">3. Restore from Server Backup</strong>
-              <p style="font-size: 0.78rem; color: var(--text-muted); margin: 0.2rem 0 0 0;">
-                Sync and restore all itineraries from the server's master backup snapshot.
-              </p>
-            </div>
-          </div>
-          <div style="margin-top: 0.4rem;">
-            <button type="button" class="btn btn-secondary" id="restoreServerBackupBtn" style="padding: 0.55rem 1.1rem; font-weight: 600;">
-              🔄 Sync / Restore from Server Snapshot
+          <!-- Method C: Server & Local Snapshots -->
+          <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+            <button type="button" class="btn btn-secondary btn-sm" id="restoreLocalFolderBtn" style="padding: 0.45rem 0.9rem; font-size: 0.8rem; font-weight: 600;" title="Reimports the newest JSON file in backups/local/">
+              📁 Reimport from Server Local Folder (backups/local/)
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" id="restoreServerBackupBtn" style="padding: 0.45rem 0.9rem; font-size: 0.8rem; font-weight: 600;" title="Restore from default itineraries_backup.json">
+              🔄 Restore from Server Master Backup
             </button>
           </div>
         </div>
@@ -1450,7 +1496,7 @@
   </footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="/static/app.js?v=4.6" onerror="console.warn('app.js load error, purging service worker cache...');if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(function(regs){for(var r of regs){r.unregister();}window.location.reload();});}"></script>
+  <script src="/static/app.js?v=4.7" onerror="console.warn('app.js load error, purging service worker cache...');if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(function(regs){for(var r of regs){r.unregister();}window.location.reload();});}"></script>
 </body>
 </html>
 

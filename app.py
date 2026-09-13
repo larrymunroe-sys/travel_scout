@@ -37,7 +37,7 @@ from scout.calendar_sync import generate_trip_ics, generate_google_calendar_url
 from scout.backup import (
     restore_itineraries, auto_backup_on_change, record_deleted_item, record_deleted_items,
     unmark_deleted_item, is_item_deleted_and_unchanged, compute_item_hash, backup_itineraries,
-    DEFAULT_BACKUP_FILE, HISTORY_DIR
+    DEFAULT_BACKUP_FILE, HISTORY_DIR, LOCAL_BACKUP_DIR
 )
 
 
@@ -101,14 +101,27 @@ async def get_favicon():
 # Ensure database tables, seeds, and backups exist on import
 init_db()
 with SessionLocal() as _db:
-    scout_engine.seed_initial_data_if_empty(_db)
     try:
-        restore_res = restore_itineraries(_db, sync_mode=True)
-        if restore_res.get("restored_trips") or restore_res.get("restored_items"):
-            print(f"[Startup Backup/Restore] Restored {restore_res.get('restored_trips', 0)} trips, {restore_res.get('restored_items', 0)} items (skipped {restore_res.get('skipped_deleted_items', 0)} deleted items)")
-        auto_backup_on_change(_db)
+        # 1. Attempt restore from backup file or local folder first if available
+        if DEFAULT_BACKUP_FILE.exists() and DEFAULT_BACKUP_FILE.stat().st_size > 50:
+            restore_res = restore_itineraries(_db, sync_mode=True)
+            if restore_res.get("restored_trips") or restore_res.get("restored_items"):
+                print(f"[Startup Backup/Restore] Restored {restore_res.get('restored_trips', 0)} trips, {restore_res.get('restored_items', 0)} items, {restore_res.get('restored_users', 0)} users (skipped {restore_res.get('skipped_deleted_items', 0)} deleted items)")
     except Exception as _b_err:
-        print("[Startup Backup/Restore] Notice:", _b_err)
+        print("[Startup Backup/Restore] Restore Notice:", _b_err)
+
+    # 2. Seed initial demo data ONLY if database is still empty after restore attempt
+    try:
+        scout_engine.seed_initial_data_if_empty(_db)
+    except Exception as _s_err:
+        print("[Startup Backup/Restore] Seed Notice:", _s_err)
+
+    # 3. Safe auto-backup only if trips exist
+    try:
+        if _db.query(Trip).count() > 0:
+            auto_backup_on_change(_db)
+    except Exception as _a_err:
+        print("[Startup Backup/Restore] Auto-backup Notice:", _a_err)
 
 # ==================== CRYPTOGRAPHIC SESSION MANAGEMENT ====================
 
@@ -2482,13 +2495,23 @@ async def run_trip_bookstores(trip_id: str, payload: SpecialistScoutPayload, req
 
 @app.get("/api/backup/status")
 async def get_backup_status(request: Request, db: Session = Depends(get_db)):
-    """Retrieve itinerary backup health, file size, and historical snapshots count."""
+    """Retrieve itinerary backup health, file size, local backup folder status, and historical snapshots count."""
     user = get_optional_current_user(request, db)
     backup_exists = DEFAULT_BACKUP_FILE.exists()
     backup_size = DEFAULT_BACKUP_FILE.stat().st_size if backup_exists else 0
     mtime = datetime.fromtimestamp(DEFAULT_BACKUP_FILE.stat().st_mtime).isoformat() if backup_exists else None
 
     history_files = list(HISTORY_DIR.glob("itineraries_*.json")) if HISTORY_DIR.exists() else []
+
+    local_files = sorted(list(LOCAL_BACKUP_DIR.glob("*.json")), key=os.path.getmtime, reverse=True) if LOCAL_BACKUP_DIR.exists() else []
+    latest_local = None
+    if local_files:
+        latest_local = {
+            "filename": local_files[0].name,
+            "size_bytes": local_files[0].stat().st_size,
+            "mtime": datetime.fromtimestamp(local_files[0].stat().st_mtime).isoformat()
+        }
+
     deleted_tombstones = db.query(DeletedItem).count()
 
     return {
@@ -2498,9 +2521,25 @@ async def get_backup_status(request: Request, db: Session = Depends(get_db)):
         "backup_size_bytes": backup_size,
         "last_backup_time": mtime,
         "historical_snapshots_count": len(history_files),
+        "local_snapshots_count": len(local_files),
+        "latest_local_snapshot": latest_local,
+        "local_folder_path": str(LOCAL_BACKUP_DIR),
         "total_trips": db.query(Trip).count(),
+        "total_users": db.query(User).count(),
         "deletion_memory_tombstones": deleted_tombstones
     }
+
+
+@app.post("/api/backup/reimport-local")
+async def reimport_from_local_folder(request: Request, db: Session = Depends(get_db)):
+    """Reimport itineraries from the latest snapshot in the local backups folder."""
+    user = get_optional_current_user(request, db)
+    target_user_id = user.id if user else None
+    res = restore_itineraries(db, backup_folder=LOCAL_BACKUP_DIR, sync_mode=True, target_user_id=target_user_id)
+    if res.get("status") == "skipped":
+        res = restore_itineraries(db, backup_file=DEFAULT_BACKUP_FILE, sync_mode=True, target_user_id=target_user_id)
+    auto_backup_on_change(db)
+    return res
 
 
 @app.get("/api/backup/download")
